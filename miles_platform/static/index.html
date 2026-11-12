@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Miles Platform · 模型控制台</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%23101915'/%3E%3Cpath d='M9 29V11l11 12 11-12v18' fill='none' stroke='%2387ebbc' stroke-width='4'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="/assets/style.css" />
+    <script defer src="/assets/app.js"></script>
+  </head>
+  <body>
+    <section id="login" class="login-screen" hidden>
+      <div class="login-art">
+        <div class="wordmark">
+          <span class="brand-mark">M</span> miles <em>platform</em>
+        </div>
+        <div>
+          <span class="eyebrow">YOUR MODELS. YOUR INFRASTRUCTURE.</span>
+          <h1>让模型迭代，<br />成为日常。</h1>
+          <p>
+            从一份数据、一次训练，到稳定运行的 API。<br />在自己的基础设施上，掌握每个模型版本。
+          </p>
+          <div class="pipeline">
+            <span>数据</span><i>→</i><span>训练</span><i>→</i><span>评测</span
+            ><i>→</i><span>上线</span>
+          </div>
+        </div>
+        <small>Built on Miles & SGLang · 独立运营的平台原型</small>
+      </div>
+      <form id="login-form" class="login-form">
+        <span class="eyebrow">WORKSPACE CONSOLE</span>
+        <h2>欢迎回来</h2>
+        <p>登录你的模型工作区</p>
+        <label
+          >管理员密码<input
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            required
+            autofocus
+            placeholder="输入工作区密码" /></label
+        ><button class="primary" type="submit">
+          进入控制台 <span>↗</span>
+        </button>
+        <p id="login-error" class="error" role="alert"></p>
+        <small>通过你的 SSH 连接安全访问。登录有效期为 8 小时。</small>
+      </form>
+    </section>
+    <div id="shell" hidden>
+      <aside class="sidebar">
+        <a class="wordmark" href="#overview"
+          ><span class="brand-mark">M</span> miles <em>platform</em></a
+        >
+        <div class="workspace">
+          <span class="avatar">W</span>
+          <div>My workspace<small>独立 GPU 工作区</small></div>
+          <span class="subtle">⌄</span>
+        </div>
+        <small class="nav-label">工作区</small>
+        <nav id="navigation"></nav>
+        <div class="sidebar-footer">
+          <span class="pill neutral">单工作区 · Preview</span
+          ><a href="/api/docs" target="_blank" rel="noopener"
+            >API 文档 <span>↗</span></a
+          ><button id="logout" class="quiet">退出登录</button>
+          <div class="profile">
+            <span class="avatar mint">W</span>
+            <div>wdlctc<small>Workspace owner</small></div>
+          </div>
+        </div>
+      </aside>
+      <div class="main-wrap">
+        <header class="topbar">
+          <div>
+            My workspace <span>/</span> <strong id="breadcrumb">概览</strong>
+          </div>
+          <div>
+            <span id="connection" class="live">连接中</span
+            ><button class="quiet" data-action="logout" aria-label="退出工作区">
+              退出</button
+            ><span class="avatar small">W</span>
+          </div>
+        </header>
+        <main id="content"></main>
+        <footer class="page-footer">
+          Miles Platform <span>训练、评测与部署，统一管理。</span>
+        </footer>
+      </div>
+    </div>
+    <dialog id="modal">
+      <div class="dialog-header">
+        <h2 id="modal-title"></h2>
+        <button id="close-modal" class="icon-button" aria-label="关闭">
+          ×
+        </button>
+      </div>
+      <div id="modal-body"></div>
+    </dialog>
+    <div id="toast" role="status" hidden></div>
+  </body>
+</html>

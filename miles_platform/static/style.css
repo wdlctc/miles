@@ -1077,3 +1077,27 @@ dialog.wide {
     gap: 12px;
   }
 }
+.billing-packs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+.workspace label {
+  width: 100%;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+.workspace select {
+  width: 100%;
+  margin-top: 8px;
+}
+#account-profile {
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 800px) {
+  .billing-packs {
+    grid-template-columns: 1fr;
+  }
+}

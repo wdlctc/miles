@@ -22,6 +22,8 @@ def main():
         "runner": ("runner", False),
         "slot-a": ("serve --slot a", False),
         "slot-b": ("serve --slot b", False),
+        "slot-c": ("serve --slot c", False),
+        "slot-d": ("serve --slot d", False),
     }
     for suffix, (command, autostart) in services.items():
         name = "miles-platform-" + suffix

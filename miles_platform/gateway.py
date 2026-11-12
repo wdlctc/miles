@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from decimal import Decimal
 
 import httpx
 from fastapi import HTTPException
@@ -9,6 +10,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from miles_platform.store import now, uid
+from miles_platform import billing
 
 
 class Chat(BaseModel):
@@ -37,7 +39,8 @@ class Chat(BaseModel):
 
 def reserve(store, key, deployment):
     request_id = uid("req")
-    rates = store.setting("rates", {})
+    billing.prepare(store)
+    rates = billing.pricing(store)
     with store.connect(write=True) as db:
         if key["id"] != "console":
             current = db.execute("SELECT revoked FROM api_keys WHERE id=?", (key["id"],)).fetchone()
@@ -48,6 +51,10 @@ def reserve(store, key, deployment):
         ).fetchone()[0]
         if count >= key["rpm"]:
             raise HTTPException(429, "Request limit reached; retry in one minute", headers={"Retry-After": "60"})
+        concurrent = db.execute("SELECT COUNT(*) FROM usage WHERE ended IS NULL").fetchone()[0]
+        if concurrent >= 2:
+            raise HTTPException(429, "Workspace concurrency limit reached (2)")
+        billing.reserve(db, store, request_id, "inference", billing.inference_quote(store, rates))
         db.execute(
             """INSERT INTO usage(id,key_id,deployment_id,created,status,input_rate,output_rate)
                     VALUES (?,?,?,?,102,?,?)""",
@@ -63,11 +70,15 @@ def record(store, request_id, status, usage):
     row = store.one("SELECT input_rate,output_rate FROM usage WHERE id=?", (request_id,))
     cost = None
     if measured and row["input_rate"] is not None and row["output_rate"] is not None:
-        cost = (prompt * row["input_rate"] + completion * row["output_rate"]) / 1_000_000
-    store.execute(
-        "UPDATE usage SET ended=?,status=?,prompt_tokens=?,completion_tokens=?,complete=?,cost=? WHERE id=?",
-        (now(), status, prompt, completion, int(measured), cost, request_id),
-    )
+        cost = float(
+            (prompt * Decimal(str(row["input_rate"])) + completion * Decimal(str(row["output_rate"]))) / 1_000_000
+        )
+    with store.connect(write=True) as db:
+        db.execute(
+            "UPDATE usage SET ended=?,status=?,prompt_tokens=?,completion_tokens=?,complete=?,cost=? WHERE id=?",
+            (now(), status, prompt, completion, int(measured), cost, request_id),
+        )
+        billing.settle(db, request_id, billing.micros(cost) if cost is not None else 0)
 
 
 async def proxy(store, chat, key, client_factory=httpx.AsyncClient):

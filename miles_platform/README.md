@@ -1,39 +1,42 @@
-# Miles Platform console
+# Miles Platform customer beta
 
-A working single-workspace control plane for this fork, with a Chinese console,
-durable job queue, model registry, evaluation, deployment switching, API keys and
-metering. It runs on the authorized GPU host alongside the first
-[training-to-serving experiment](../deployments/platform-smoke/README.md).
-Baseten is a product reference; this app does not call Baseten cloud services
-and is not affiliated with Baseten or RadixArk.
+This fork combines Miles post-training with a self-hosted console and SGLang
+inference gateway. Baseten is a product reference, not a connected hosting
+service. The platform is independently operated.
 
-## What works
+The customer release adds invite-only accounts, separate workspaces, roles,
+prepaid USD accounting and Stripe hosted Checkout. **Live payments and public
+customer launch are not activated.** The owner has not yet supplied a domain,
+a Stripe merchant account or durable storage. Payment contract tests mock
+Stripe HTTP responses; they are not evidence of payment on Stripe's network.
 
-| Page | Behavior |
+## Implemented behavior
+
+| Area | Behavior |
 | --- | --- |
-| Overview | Actual jobs, inference usage, active deployment and live NVIDIA GPU metrics |
-| Training | Create bounded Qwen3-0.6B FSDP GRPO jobs, follow logs, cancel queued/running jobs |
-| Models | Immutable export directories, SHA-256, shape/key/finite-weight checks and independent evaluation history |
-| Deployments | Start a candidate, verify its model identity and health, atomically switch the stable alias, roll back |
-| Playground | Real streaming responses through the metered inference gateway |
-| API keys | Show the secret once, store only a hash, enforce per-key requests/minute, revoke keys |
-| Usage | Input/output token counts, allocated training GPU time, optional price snapshots and CSV export |
-| Datasets | Upload math-task JSONL, validate messages/labels and reject exact duplicate or overlapping prompts |
+| Accounts | Email/password, one-time invitations, password changes/recovery, eight-hour sessions |
+| Workspaces | Separate database, datasets, models, API keys, usage, ledger and deployment route |
+| Roles | Owner: billing/team; Admin: deployment/keys/invites; Member: tasks/data/playground; Viewer: read-only |
+| Operator | Create/suspend workspaces, set platform prices, inspect host GPU metrics |
+| Training | Bounded Qwen3-0.6B FSDP GRPO, queue, logs, cancellation and restart adoption |
+| Models | Export, tensor checks, SHA-256, numeric evaluation and a publication gate |
+| Serving | Workspace-owned slots, health checks, stable alias, rollback, streaming and rate limits |
+| Billing | Integer-microUSD credit ledger, atomic reservations/settlement, orders and usage CSV |
+| Stripe | Hosted Checkout, signed webhooks, canonical payment validation, replay protection, refunds/disputes |
 
-The tested training recipe uses GPU 1–3 (two FSDP trainers, one rollout engine).
-GPU 0 serves the stable model and candidate slots. Training automatically exports
-and evaluates its model; deployment is a separate operator action. The first
-console-submitted run completed training, export and chat evaluation with 4/8
-correct answers. This tiny evaluation establishes integration behavior, not
-model quality. The machine-readable acceptance record is
-[acceptance.json](acceptance.json).
+This is application-level isolation on **one trusted GPU host**, not a VM or
+container boundary for arbitrary customer code. Customers submit text datasets
+and bounded parameters only, never executable code, reward functions, model
+binaries or arbitrary commands. Numeric grading does not use `eval` or symbolic
+parsing. The console is primarily Chinese with bilingual account/billing labels;
+a fully English UI remains future work.
 
-## Start on the provisioned server
+## Deploy and migrate
 
-Requirements: Linux, the existing working Miles/SGLang GPU environment,
-four A100 GPUs, Supervisor and the Vast logging helpers. This is a single-host
-adapter, not a Kubernetes or multi-tenant scheduler. It owns the local Ray
-cluster; do not run unrelated Ray workloads or GPU jobs on GPUs 1–3 concurrently.
+The supported target is the existing Linux/Vast environment with four A100 GPUs,
+Miles/SGLang, Supervisor and Vast logging helpers. Run **one API process and one
+worker**. The runner owns Ray and GPUs 1–3; avoid other workloads there. GPU 0
+serves models.
 
 ```bash
 cd /workspace/miles-platform
@@ -42,129 +45,167 @@ export MILES_PLATFORM_STATE=/workspace/miles-platform-state
 python -m miles_platform.provision
 ```
 
-The provisioner imports the previously verified smoke model when present,
-creates a random admin password, and installs only the platform's own services:
+Only platform services are managed: `miles-platform-console` on 127.0.0.1:18090,
+`miles-platform-worker`, `miles-platform-runner`, and slots a–d on 18081–18084.
+The imported server on 18080 remains owned by the default workspace. Four slots
+bound resident model capacity; a full pool rejects a candidate without evicting
+another tenant's model. Jupyter and provider management services stay unchanged.
 
-| Supervisor name | Role | Port |
-| --- | --- | --- |
-| `miles-platform-console` | Console, admin API and inference gateway | 127.0.0.1:18090 |
-| `miles-platform-worker` | Persistent queue coordination | None |
-| `miles-platform-runner` | One supervised job at a time | None |
-| `miles-platform-slot-a` | Candidate/active inference server | 127.0.0.1:18081 |
-| `miles-platform-slot-b` | Alternate inference server | 127.0.0.1:18082 |
-
-The original `miles-platform-inference` on port 18080 remains available as the
-imported version. The existing Jupyter and provider management services are
-untouched. The new service ports bind to loopback; reach them privately:
+Before upgrading, wait for jobs, stop the platform API/worker, back up metadata
+and retain the previous Git revision. Migration is additive: the original
+workspace becomes `default`; login is **owner** plus the existing password from
+`control/admin-password` (0600). Existing resource IDs and API keys remain valid;
+browser sessions require login again. The default workspace is explicitly
+exempt from credit deductions; new customer workspaces are prepaid.
 
 ```bash
 ssh -N -L 127.0.0.1:8081:127.0.0.1:18090 -p SSH_PORT SSH_USER@SSH_HOST
 ```
 
-Open `http://localhost:8081/`. The admin password is stored in
-`$MILES_PLATFORM_STATE/control/admin-password` with mode 0600. Do not commit it
-or the runtime database. Admin sessions use HttpOnly, SameSite=Strict cookies
-and expire after eight hours; the supported access is HTTP over a private SSH
-tunnel. Use TLS and Secure cookies before introducing a public gateway.
+Open `http://localhost:8081/`. Retain private SSH access until public launch
+requirements are met. Never expose raw Ray, SGLang or root access to customers.
+The API schema is available after login at `/api/docs`. Standalone dependencies
+are pinned in `requirements.txt`; the GPU runner needs the existing smoke-run
+environment. The frontend has no build step.
 
-The standalone admin dependencies are pinned in `requirements.txt`; the GPU
-runner also needs the environment documented for the smoke experiment. No
-frontend package installation or build step is required.
+## Onboard customers
 
-## Operator workflow
+1. In Customers, create a workspace using the customer's email.
+2. Deliver the one-time invitation through a trusted channel. It expires after
+   24 hours and is stored only as a hash. This app does not send email.
+3. A new user sets a password of at least 12 characters; an existing account must
+   enter its existing password to join another workspace.
+4. Set platform prices in Usage before paid compute: USD/GPU-hour and
+   USD/million input/output tokens. Customers cannot edit prices. Requests/jobs
+   keep the accepted price snapshot.
+5. The customer uploads disjoint JSONL, buys credits once Stripe is configured,
+   trains/evaluates/deploys a model, then creates an API key.
 
-1. Optionally upload disjoint training/evaluation JSONL in Datasets. Each row
-   contains `prompt` (text chat messages) and `label` (the math answer). Request
-   a final `\\boxed{}` answer in the prompt. The built-in GSM8K subset is ready.
-2. Create a training task with 1–10 updates and a learning rate from 1e-7 to
-   1e-5. The process has a 20-minute training timeout; there is one job runner.
-3. Inspect the task log, registered model and independent evaluation. The
-   initial demonstration gate is accuracy >= 37.5% and no truncated responses.
-   This threshold is a prototype setting, not a business acceptance standard.
-4. Deploy the model. The worker verifies candidate `/health` and `/v1/models`
-   before changing the route. In-flight gateway requests keep their selected
-   deployment. A retired slot waits for tracked requests before it is reused.
-5. Create an API key and call the stable model alias `miles-default`. Revoke a
-   key when no longer needed. In-flight requests are allowed to finish.
-6. Configure your own USD unit rates under Usage, if desired. Export the ledger
-   as CSV. No payment collection, credit purchase or automatic charging occurs.
+Each JSONL row has `prompt` (text chat messages) and `label` (number, decimal or
+fraction). Ask for a final `\\boxed{}` answer. All other fields are discarded.
+The fixed recipe accepts 1–10 updates and has a 20-minute training timeout.
+The 37.5% demonstration evaluation gate is not a business-quality guarantee.
 
-```bash
-curl http://localhost:8081/v1/chat/completions \
-  -H "Authorization: Bearer $MILES_API_KEY" \
-  -H 'Content-Type: application/json' \
-  -d '{"model":"miles-default","messages":[{"role":"user","content":"What is 17 + 25?"}],"temperature":0,"max_tokens":64,"stream":true}'
-```
+Current workspace quotas: 3 active jobs, 10 registered trained models,
+20 datasets (5 MB train + 1 MB eval each), 20 active keys, 50 members/invitations,
+2 concurrent inference requests, at most 120 requests/minute/key,
+2,048-token context and 512 output tokens. Retention/deletion and capacity
+increases are operator-managed. The runner alternates between queued tenants.
+Suspension blocks new requests and cancels queued/running jobs. Accepted
+inference calls may finish. Keys are workspace credentials shared by the team;
+removing a member does not automatically revoke those shared keys.
 
-Supported request fields are text `messages`, `model`, `temperature`, `top_p`,
-`max_tokens` (1–512), `stream` and `stream_options`. The underlying context
-window is 2,048 tokens; unsupported fields and oversized message payloads are
-rejected. Only the public inference routes accept API keys; an API key cannot
-administer jobs, deployments or other keys. Playground requires an admin session.
-
-## APIs and persistence
-
-The interactive API schema is at `/api/docs`. Admin routes require the login
-cookie and reject cross-origin mutations. Examples of the implemented resources:
-
-- `/api/jobs`, `/api/jobs/{id}/cancel`, `/api/jobs/{id}/logs`
-- `/api/models/{id}/evaluate`, `/api/models/{id}/deploy`
-- `/api/deployments/{id}/rollback`
-- `/api/datasets`, `/api/keys`, `/api/rates`, `/api/usage.csv`
-- `/api/state`, `/api/runtime`
-- `/v1/models`, `/v1/chat/completions`
-
-Job creation/evaluation/deployment accept `Idempotency-Key`: repeating the same
-key and parameters returns the original job; a conflicting payload returns 409.
-SQLite WAL transactions own job claims, key-rate reservations and route changes.
-The worker adopts a still-running Supervisor runner after restart. If the runner
-exits without recording completion, the worker marks the job failed and stops
-its training Ray processes. Cancellation is recorded only after stopping the
-runner and cleaning up training. It does not discard retained artifacts/logs.
-
-State is under `$MILES_PLATFORM_STATE/control`: `platform.sqlite3`, logs,
-datasets, run directories and the admin bootstrap password. Weight directories
-are under `$MILES_PLATFORM_STATE/models`. Service logs are at
-`/var/log/miles-platform-*.log`.
-
-The metadata database survives service restarts. The host currently has no
-persistent volume, so instance destruction/recycle removes both metadata and
-weights. For backups, use SQLite's backup API rather than copying a live WAL
-file alone, and copy selected immutable weight directories off-host. Treat the
-database backup as sensitive: it includes authentication hashes and sessions.
-
-## Metering semantics
-
-Inference usage comes from the upstream response, including the final usage
-chunk for streaming. On disconnect or missing usage, mark the request incomplete
-instead of inventing counts or costs. An API-process restart marks its old
-in-flight requests as interrupted (599). The request ledger includes failed
-requests and records the deployment chosen when each request began.
-
-Training GPU seconds are three allocated GPUs multiplied by training execution
-time, including Ray initialization/cleanup. They are not hardware-utilization
-samples. Rate settings are copied onto each request/job when it starts; editing
-rates never changes old records. Unconfigured rates produce null costs, not zero
-charges. Estimates exclude idle inference GPU rental, storage, network and taxes;
-they are not invoices or a profitability calculation. The imported historical
-smoke job has no metered compute duration and is excluded from compute totals.
-
-## Validation and limits
+After verifying a customer's identity, an operator can issue a recovery link:
 
 ```bash
-python -m pytest tests/fast/platform -q
-node --check miles_platform/static/app.js
+python -m miles_platform.operations reset-link --email customer@example.com --output /private/reset-link.txt
 ```
 
-CPU tests cover login/origin protections, secret hashing/revocation, transactional
-rate limits, streaming/non-streaming usage, price snapshots, dataset leakage,
-idempotency, restart adoption, cancellation and preserving the active route when
-a candidate is unhealthy. GPU acceptance separately exercises real training,
-export/evaluation, deployment/rollback, cancellation and inference continuity.
+The private output file is 0600; deliver it securely and remove it after use.
+The link expires in one hour, works once, and revokes existing login sessions.
 
-This release supports one trusted operator workspace and one tested recipe.
-It does not provide customer multi-tenancy, arbitrary customer code execution,
-durable off-host artifact storage, an HA database, payment processing, or an
-autoscaling service. Evaluation is sequential and small; no accuracy or latency
-SLA is implied. Next production work is isolation/RBAC, object storage,
-project-aware accounting, a durable distributed queue and broader quality gates.
+## Stripe setup
+
+Keep credentials in the server environment, never in Git/chat. On Vast, the
+existing Supervisor helper loads `/workspace/.env`; protect that file and
+restart the platform API/worker after changes. Use
+[production.env.example](production.env.example) as a configuration reference.
+`python -m miles_platform.operations doctor` reports missing settings without keys.
+
+1. Begin with a Stripe sandbox/test account, `STRIPE_MODE=test`, a `sk_test_…`
+   secret and its webhook signing secret. For private testing, Stripe CLI can
+   forward events to `http://127.0.0.1:18090/api/stripe/webhook` on the server.
+2. Configure snapshot webhook API version **2026-10-28.endive** and subscribe to
+   `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+   `charge.refunded`, `charge.dispute.created`, `charge.dispute.updated`,
+   `charge.dispute.closed`.
+3. Exercise real sandbox Checkout, declines, duplicate/delayed events, refunds
+   and recovery. **This has not yet been possible without merchant credentials.**
+4. Use new workspaces for live customers: a workspace with test orders cannot
+   switch to live credit. Test money must never be promoted to real balances.
+
+Server-owned packs provide $25, $100 or $500 USD compute credit. Clients cannot
+set the amount, currency, tenant or redirect destination. Checkout uses a stored
+order and a Stripe idempotency key. Card details stay on Stripe; invoices are
+requested from Stripe. Tax/legal setup remains the merchant's responsibility.
+Automatic Tax is configurable and defaults to disabled.
+
+Returning to the success page **never credits a wallet**. Webhooks verify raw
+body signatures and a five-minute timestamp tolerance, then retrieve canonical
+session/payment/charge data. Customer, tenant/order metadata, subtotal, currency,
+mode and captured total must match. Event deduplication, net credited amount and
+ledger entry commit atomically. Reconciliation failures return non-2xx for retry.
+Monitor failed Stripe deliveries and replay them after fixing the cause.
+
+Refunds are issued by the operator in Stripe Dashboard, then reconciled by
+webhooks. Partial refunds reverse the credit component, excluding tax.
+Duplicate/out-of-order events cannot double-credit. Open disputes pause paid
+compute; lost disputes deduct disputed credit once, won disputes lift the hold.
+Refunds after consumption can create a negative balance, which blocks new use.
+
+Training reserves at most 3 GPUs × 22 minutes at the accepted rate, including
+cleanup allowance. Inference reserves the engine context/output upper bound.
+Settlement uses observed usage, rounds up to microUSD and never exceeds the
+reservation; unused funds are released. Unknown usage is not invented or billed.
+Restart reconciliation settles terminal records once. Evaluation and resident
+hosting are included within beta quotas. This is prepaid compute, not recurring
+subscriptions, automatic recharge or unlimited hosting.
+
+Official references: [Checkout Sessions](https://docs.stripe.com/api/checkout/sessions/create),
+[webhooks](https://docs.stripe.com/webhooks),
+[fulfillment](https://docs.stripe.com/checkout/fulfillment.md?ui=full-page).
+
+## State and recovery
+
+The original workspace database is `control/platform.sqlite3`. Identity,
+memberships, invitations, sessions and engine ownership are in
+`control/identity/platform.sqlite3`. New tenant state lives under
+`control/workspaces/<server-generated-id>/`; each has its own control database,
+models, datasets and logs. Authenticated membership or a valid bearer key selects
+the workspace before resource queries. Tenant headers never grant access.
+
+SQLite WAL supports this single-host topology only: do not share databases over
+NFS or start multiple API/worker replicas. A durable local block volume can
+support the beta; PostgreSQL/object-storage/HA adapters remain future work.
+**The current host has no persistent workspace volume: recycle/destroy can erase
+its state.** A same-host backup is not durable protection.
+
+After jobs finish, stop the platform API/worker for a maintenance backup:
+
+```bash
+python -m miles_platform.operations backup-metadata --destination /private/miles-metadata.tar.gz
+```
+
+This uses SQLite backup/integrity checks and includes private credentials,
+identities, ledgers and datasets. It **excludes weights, checkpoints and caches**.
+Copy the 0600 archive off-host and separately preserve exported model directories,
+tokenizers/configs and the pinned base model. Recover to the same absolute state
+path. Verify databases and artifact hashes on a fresh host before claiming a
+recoverable production backup. Roll back code and its matching state snapshot
+together in maintenance; old single-workspace code must not serve new customer data.
+
+## Public launch gate
+
+Live collection requires an HTTPS customer domain; a verified Stripe merchant;
+configured tax treatment and published terms/privacy/refund policies; support
+contact; durable state/model storage with off-host restore tested; actual Stripe
+sandbox and controlled merchant-authorized live payment/refund acceptance;
+reconciliation monitoring; and workload-specific quality/capacity validation.
+
+`MILES_LIVE_ENABLED=true` and `MILES_DURABLE_STORAGE_ACCEPTED=true` are explicit
+operator attestations, **not automated proof** of those requirements. Do not set
+them just to suppress a warning. This release claims no uptime SLA, autoscaling,
+arbitrary-code sandbox, recurring subscription engine or complete localization.
+
+## Validation
+
+```bash
+python -m pytest --confcutdir=tests/fast/platform tests/fast/platform -q
+python -m pytest tests/fast/launch_scripts tests/manual/launch_scripts -q
+```
+
+Application tests cover tenant/role boundaries, invitation/recovery abuse,
+concurrent balances, cancellation/restart settlement, payment signatures and
+mismatches, refunds/disputes, engine ownership, scheduling and metadata restoration.
+They do not contact Stripe. Historical console GPU evidence is in
+[acceptance.json](acceptance.json); customer-release evidence is kept separately.

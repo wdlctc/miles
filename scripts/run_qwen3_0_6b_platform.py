@@ -11,6 +11,7 @@ Args:
     --output-dir: Checkpoint and TensorBoard output directory; use a fresh path.
     --num-gpus-per-node / --trainer-gpus: Total GPUs and the training allocation.
     --num-rollout: Number of updates (default: two).
+    --numeric-reward: Use the platform's bounded numeric grader for customer data.
 
 Example:
     python scripts/run_qwen3_0_6b_platform.py \
@@ -40,6 +41,7 @@ class ScriptArgs(U.ExecuteTrainConfig):
     max_tokens_per_gpu: int = 2048
     learning_rate: float = 1e-6
     graceful_ray_stop: bool = True
+    numeric_reward: bool = False
 
     def __post_init__(self):
         if self.num_nodes != 1:
@@ -108,7 +110,8 @@ def _data_flags(args: ScriptArgs) -> list[str]:
         "--eval-temperature",
         "0",
     ]
-    return checkpoint + rollout + evaluation
+    reward = ["--custom-rm-path", "miles_platform.rewards.reward"] if args.numeric_reward else []
+    return checkpoint + rollout + evaluation + reward
 
 
 def _training_flags(args: ScriptArgs) -> list[str]:

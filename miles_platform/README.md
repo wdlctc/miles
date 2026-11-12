@@ -4,6 +4,12 @@ This fork combines Miles post-training with a self-hosted console and SGLang
 inference gateway. Baseten is a product reference, not a connected hosting
 service. The platform is independently operated.
 
+The console's visual theme follows the public Baseten site's monochrome
+typography, square controls, fine borders and pastel geometric accents, while
+retaining the Miles identity. Shared design tokens and responsive layouts live
+in `static/style.css`; the theme uses system fonts and CSS geometry with no
+third-party font or image requests.
+
 The customer release adds invite-only accounts, separate workspaces, roles,
 prepaid USD accounting and Stripe hosted Checkout. **Live payments and public
 customer launch are not activated.** The owner has not yet supplied a domain,

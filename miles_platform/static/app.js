@@ -241,13 +241,17 @@ function curlExample() {
 
 function render() {
   if (!state) return;
-  $("#navigation").innerHTML = Object.keys(titles)
+  const navigation = Object.keys(titles)
     .filter(visiblePane)
     .map(
       (key) =>
         `<a href="#${key}" class="${pane === key ? "active" : ""}"><svg viewBox="0 0 24 24"><path d="${paths[key] || paths.usage}"/></svg>${titles[key]}</a>`,
     )
     .join("");
+  if ($("#navigation").dataset.rendered !== navigation) {
+    $("#navigation").innerHTML = navigation;
+    $("#navigation").dataset.rendered = navigation;
+  }
   $("#breadcrumb").textContent = titles[pane];
   $("#content").innerHTML = {
     overview,

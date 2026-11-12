@@ -32,12 +32,16 @@ async function refreshAccount() {
   const workspace = account.workspaces.find(
     (w) => w.id === account.user.tenant,
   );
-  $("#workspace-select").innerHTML = account.workspaces
+  const options = account.workspaces
     .map(
       (w) =>
         `<option value="${escape(w.id)}" ${w.id === workspace.id ? "selected" : ""}>${escape(w.name)}</option>`,
     )
     .join("");
+  if ($("#workspace-select").dataset.rendered !== options) {
+    $("#workspace-select").innerHTML = options;
+    $("#workspace-select").dataset.rendered = options;
+  }
   $("#workspace-name").textContent = workspace.name;
   $("#account-profile").innerHTML =
     `${escape(account.user.email)}<small>${escape(account.user.role)}</small>`;

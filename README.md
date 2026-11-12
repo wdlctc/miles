@@ -1,3 +1,5 @@
+> Fork addition (2026-11-11): This fork explores an independently operated post-training and inference platform built on Miles. Start with the [platform design and MVP acceptance criteria](PLATFORM.md). Platform services are not implemented yet.
+
 <div align="center">
 
 <img src="https://raw.githubusercontent.com/radixark/miles/main/docs/assets/images/brand/miles_logo.png" alt="Miles Logo" width="340">

@@ -1,0 +1,368 @@
+{
+  "schema_version": 1,
+  "observed_at_utc": "2026-11-12",
+  "status": "engineering_smoke_passed_quality_parity_unresolved",
+  "hardware": {
+    "gpus": 4,
+    "gpu_model": "NVIDIA A100-SXM4-40GB",
+    "training_gpus": 2,
+    "rollout_gpus": 2,
+    "inference_gpu": 0
+  },
+  "provenance": {
+    "miles_runtime_commit": "7ba8e1627e0bb335f5e82f180eb64f63ef26f01b",
+    "sources": "sources.json",
+    "environment": "environment.json",
+    "initial_launcher": "one-off launcher using Miles command_utils",
+    "committed_recipe_comparison": {
+      "train_argv_differences": {
+        "--num-gpus-per-node": {
+          "observed": null,
+          "recipe": [
+            "4"
+          ]
+        }
+      },
+      "numeric_spelling_normalized": [
+        "--lr"
+      ],
+      "all_other_train_flags_match": true,
+      "observed_backend_gpu_count": 4,
+      "recipe_backend_gpu_count": 4
+    }
+  },
+  "training": {
+    "exit_code": 0,
+    "backend": "fsdp",
+    "algorithm": "grpo",
+    "model": "Qwen3-0.6B",
+    "updates": 2,
+    "training_pool_rows": 64,
+    "prompts_per_update": 4,
+    "responses_per_prompt": 4,
+    "generated_training_responses": 32,
+    "learning_rate": 1e-06,
+    "gradient_norms": [
+      3.408663749694824,
+      2.1998753547668457
+    ],
+    "final_checkpoint": "iter_0000002",
+    "ray_workers_stopped_after_run": true
+  },
+  "export": {
+    "unique_tensor_count": 310,
+    "tied_weight_alias": "lm_head.weight -> model.embed_tokens.weight",
+    "changed_tensors": 247,
+    "max_absolute_weight_change": 3.814697265625e-06,
+    "all_weights_finite": true,
+    "export_sha256": "53629e2ac4f2dbf91607a56b982ef8360bce66fdf06f1659ffb066d689157105",
+    "export_bytes": 1192135096,
+    "checkpoint_tensor_matches": 0,
+    "checkpoint_export_exact_match": false,
+    "checkpoint_tensor_matches_after_export_dtype_cast": 311,
+    "checkpoint_export_matches_after_dtype_cast": true,
+    "checkpoint_export_dtype_pairs": [
+      [
+        "torch.float32",
+        "torch.bfloat16"
+      ]
+    ],
+    "checkpoint_export_mismatched_tensors": []
+  },
+  "evaluation": {
+    "rows": 8,
+    "dataset_split": "first 8 test rows, disjoint from training split",
+    "grader": "miles.rollout.rm_hub.math_utils.grade_answer_verl",
+    "thinking": false,
+    "temperature": 0,
+    "max_new_tokens": 512,
+    "training_correct_counts": [
+      3,
+      3,
+      4
+    ],
+    "native_generate": {
+      "concurrency": 8,
+      "samples": 8,
+      "correct": 4,
+      "results": [
+        {
+          "index": 0,
+          "correct": true,
+          "prompt_tokens": 96,
+          "finish_reason": {
+            "type": "stop",
+            "matched": 151645
+          }
+        },
+        {
+          "index": 1,
+          "correct": true,
+          "prompt_tokens": 57,
+          "finish_reason": {
+            "type": "stop",
+            "matched": 151645
+          }
+        },
+        {
+          "index": 2,
+          "correct": false,
+          "prompt_tokens": 88,
+          "finish_reason": {
+            "type": "stop",
+            "matched": 151645
+          }
+        },
+        {
+          "index": 3,
+          "correct": false,
+          "prompt_tokens": 66,
+          "finish_reason": {
+            "type": "stop",
+            "matched": 151645
+          }
+        },
+        {
+          "index": 4,
+          "correct": false,
+          "prompt_tokens": 142,
+          "finish_reason": {
+            "type": "stop",
+            "matched": 151645
+          }
+        },
+        {
+          "index": 5,
+          "correct": true,
+          "prompt_tokens": 87,
+          "finish_reason": {
+            "type": "stop",
+            "matched": 151645
+          }
+        },
+        {
+          "index": 6,
+          "correct": true,
+          "prompt_tokens": 73,
+          "finish_reason": {
+            "type": "stop",
+            "matched": 151645
+          }
+        },
+        {
+          "index": 7,
+          "correct": false,
+          "prompt_tokens": 101,
+          "finish_reason": {
+            "type": "stop",
+            "matched": 151645
+          }
+        }
+      ]
+    },
+    "openai_chat": {
+      "concurrency": 4,
+      "samples": 8,
+      "correct": 3,
+      "results": [
+        {
+          "index": 0,
+          "correct": true,
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 96,
+            "total_tokens": 308,
+            "completion_tokens": 212,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0,
+            "completion_tokens_details": null
+          },
+          "latency_seconds": 4.647
+        },
+        {
+          "index": 1,
+          "correct": true,
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 57,
+            "total_tokens": 119,
+            "completion_tokens": 62,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0,
+            "completion_tokens_details": null
+          },
+          "latency_seconds": 1.51
+        },
+        {
+          "index": 2,
+          "correct": false,
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 88,
+            "total_tokens": 281,
+            "completion_tokens": 193,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0,
+            "completion_tokens_details": null
+          },
+          "latency_seconds": 4.214
+        },
+        {
+          "index": 3,
+          "correct": false,
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 66,
+            "total_tokens": 164,
+            "completion_tokens": 98,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0,
+            "completion_tokens_details": null
+          },
+          "latency_seconds": 2.268
+        },
+        {
+          "index": 4,
+          "correct": false,
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 142,
+            "total_tokens": 278,
+            "completion_tokens": 136,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0,
+            "completion_tokens_details": null
+          },
+          "latency_seconds": 2.851
+        },
+        {
+          "index": 5,
+          "correct": false,
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 87,
+            "total_tokens": 310,
+            "completion_tokens": 223,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0,
+            "completion_tokens_details": null
+          },
+          "latency_seconds": 4.608
+        },
+        {
+          "index": 6,
+          "correct": true,
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 73,
+            "total_tokens": 298,
+            "completion_tokens": 225,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0,
+            "completion_tokens_details": null
+          },
+          "latency_seconds": 4.59
+        },
+        {
+          "index": 7,
+          "correct": false,
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 101,
+            "total_tokens": 270,
+            "completion_tokens": 169,
+            "prompt_tokens_details": null,
+            "reasoning_tokens": 0,
+            "completion_tokens_details": null
+          },
+          "latency_seconds": 3.466
+        }
+      ]
+    },
+    "interpretation": "Native export evaluation matches final training aggregate. OpenAI chat differs on row 5; root cause unverified. Different request paths/concurrency; not a quality-gain or interface-parity claim."
+  },
+  "api": {
+    "transport": "SSH local forwarding to remote loopback",
+    "remote_listen": "127.0.0.1:18080",
+    "model_name": "miles-qwen3-smoke",
+    "checks": {
+      "/health": 200,
+      "/docs": 200,
+      "/v1/models": 200,
+      "served_model": "miles-qwen3-smoke",
+      "chat_status": 200,
+      "chat_content": "17 + 25 = 42\n\nReply with only the integer: **42**.",
+      "stream_status": 200,
+      "stream_done": true
+    }
+  },
+  "code_checks": {
+    "focused_launcher_tests": {
+      "passed": 2,
+      "failed": 0
+    },
+    "black": "passed, version 24.3.0",
+    "ruff": "passed, version 0.14.7",
+    "full_launcher_suite": {
+      "passed": 661,
+      "failed": 35,
+      "errors": 4
+    },
+    "clean_baseline_suite": {
+      "passed": 659,
+      "failed": 35,
+      "errors": 4
+    },
+    "failure_node_ids_match_baseline": true,
+    "shared_failure_and_error_node_ids": [
+      "ERROR tests/manual/launch_scripts/test_py_launch_scripts.py::TestEveryLauncherEntrypoint::test_commands_match_snapshot[scripts/run_deepseek_v4_1.py::prepare_spmd]",
+      "ERROR tests/manual/launch_scripts/test_py_launch_scripts.py::TestEveryLauncherEntrypoint::test_commands_match_snapshot[scripts/run_deepseek_v4_1.py::train]",
+      "ERROR tests/manual/launch_scripts/test_py_launch_scripts.py::TestEveryLauncherEntrypoint::test_entrypoint_issues_commands[scripts/run_deepseek_v4_1.py::prepare_spmd]",
+      "ERROR tests/manual/launch_scripts/test_py_launch_scripts.py::TestEveryLauncherEntrypoint::test_entrypoint_issues_commands[scripts/run_deepseek_v4_1.py::train]",
+      "FAILED tests/fast/launch_scripts/test_run_muse_spark.py::test_dapo_recipe_survives_megatron_validation[scripts/run_muse_spark_32xb300.py-None-adam]",
+      "FAILED tests/fast/launch_scripts/test_run_muse_spark.py::test_dapo_recipe_survives_megatron_validation[scripts/run_muse_spark_64xh200.py-None-adam]",
+      "FAILED tests/fast/launch_scripts/test_run_muse_spark.py::test_partial_runs_the_four_layer_checkpoint_on_one_node[scripts/run_muse_spark_32xb300.py-4-layout1]",
+      "FAILED tests/fast/launch_scripts/test_run_muse_spark.py::test_partial_runs_the_four_layer_checkpoint_on_one_node[scripts/run_muse_spark_64xh200.py-8-layout0]",
+      "FAILED tests/fast/launch_scripts/test_workplace_backend.py::test_workplace_launch_uses_the_configured_backend",
+      "FAILED tests/manual/launch_scripts/test_model_args.py::TestDiscovery::test_every_model_is_discovered_and_snapshotted",
+      "FAILED tests/manual/launch_scripts/test_model_args.py::TestEveryModelType::test_model_args_match_snapshot[deepseek-v4.1-4layer]",
+      "FAILED tests/manual/launch_scripts/test_model_args.py::TestEveryModelType::test_model_args_match_snapshot[deepseek-v4.1]",
+      "FAILED tests/manual/launch_scripts/test_model_args.py::TestEveryModelType::test_model_args_match_snapshot[glm5.3-flash-4layer]",
+      "FAILED tests/manual/launch_scripts/test_model_args.py::TestEveryModelType::test_model_args_match_snapshot[glm5.3-flash]",
+      "FAILED tests/manual/launch_scripts/test_model_args.py::TestEveryModelType::test_model_args_match_snapshot[muse-spark-full]",
+      "FAILED tests/manual/launch_scripts/test_model_args.py::TestEveryModelType::test_model_args_match_snapshot[muse-spark-last4-partial]",
+      "FAILED tests/manual/launch_scripts/test_model_args.py::TestEveryModelType::test_model_args_match_snapshot[qwen3.5-0.8B]",
+      "FAILED tests/manual/launch_scripts/test_model_args.py::TestEveryModelType::test_model_args_match_snapshot[qwen3.8-flash-next-4layer]",
+      "FAILED tests/manual/launch_scripts/test_model_args.py::TestEveryModelType::test_model_args_match_snapshot[qwen3.8-flash-next]",
+      "FAILED tests/manual/launch_scripts/test_py_launch_scripts.py::TestDiscovery::test_every_discovered_entrypoint_has_a_golden_and_vice_versa",
+      "FAILED tests/manual/launch_scripts/test_py_launch_scripts.py::TestEveryLauncherEntrypoint::test_commands_match_snapshot[scripts/amd/run_gpt_oss_20b_lora.py::full_train]",
+      "FAILED tests/manual/launch_scripts/test_py_launch_scripts.py::TestEveryLauncherEntrypoint::test_commands_match_snapshot[scripts/amd/run_gpt_oss_20b_lora.py::train]",
+      "FAILED tests/manual/launch_scripts/test_py_launch_scripts.py::TestEveryLauncherEntrypoint::test_commands_match_snapshot[scripts/run_deepseek_v4_1.py::prepare_data]",
+      "FAILED tests/manual/launch_scripts/test_py_launch_scripts.py::TestEveryLauncherEntrypoint::test_commands_match_snapshot[scripts/run_deepseek_v4_1.py::prepare_download]",
+      "FAILED tests/manual/launch_scripts/test_py_launch_scripts.py::TestEveryLauncherEntrypoint::test_commands_match_snapshot[scripts/run_glm5_3_flash_lora.py::train]",
+      "FAILED tests/manual/launch_scripts/test_py_launch_scripts.py::TestEveryLauncherEntrypoint::test_commands_match_snapshot[scripts/run_qwen3_0_6b_torchtitan.py::execute]",
+      "FAILED tests/manual/launch_scripts/test_py_launch_scripts.py::TestEveryLauncherEntrypoint::test_commands_match_snapshot[scripts/run_qwen3_0_6b_torchtitan.py::prepare]",
+      "FAILED tests/manual/launch_scripts/test_py_launch_scripts.py::TestEveryLauncherEntrypoint::test_commands_match_snapshot[scripts/tpu/run_glm4_7_flash_4layer_torchtitan.py::train]",
+      "FAILED tests/manual/launch_scripts/test_py_launch_scripts.py::TestEveryLauncherEntrypoint::test_commands_match_snapshot[scripts/tpu/run_qwen3_30b_a3b_torchtitan.py::prepare]",
+      "FAILED tests/manual/launch_scripts/test_py_launch_scripts.py::TestEveryLauncherEntrypoint::test_commands_match_snapshot[scripts/tpu/run_qwen3_30b_a3b_torchtitan.py::train]",
+      "FAILED tests/manual/launch_scripts/test_py_launch_scripts.py::TestEveryLauncherEntrypoint::test_commands_match_snapshot[scripts/tpu/run_qwen3_4b_torchtitan.py::prepare]",
+      "FAILED tests/manual/launch_scripts/test_sh_launch_scripts.py::TestEveryLaunchScript::test_invocations_match_snapshot[examples/infra_features/train_infer_mismatch_helper/run-qwen3-4b-fsdp-mis.sh]",
+      "FAILED tests/manual/launch_scripts/test_sh_launch_scripts.py::TestEveryLaunchScript::test_invocations_match_snapshot[examples/infra_features/train_infer_mismatch_helper/run-qwen3-4b-mis.sh]",
+      "FAILED tests/manual/launch_scripts/test_sh_launch_scripts.py::TestEveryLaunchScript::test_invocations_match_snapshot[examples/on_policy_distillation/qwen3_5_35b_selfdistill/phase1_rlvr_teacher.sh]",
+      "FAILED tests/manual/launch_scripts/test_sh_launch_scripts.py::TestEveryLaunchScript::test_invocations_match_snapshot[examples/on_policy_distillation/qwen3_5_35b_selfdistill/phase2_gb200.sh]",
+      "FAILED tests/manual/launch_scripts/test_sh_launch_scripts.py::TestEveryLaunchScript::test_invocations_match_snapshot[examples/on_policy_distillation/qwen3_5_35b_selfdistill/phase2_opd_selfdistill.sh]",
+      "FAILED tests/manual/launch_scripts/test_sh_launch_scripts.py::TestEveryLaunchScript::test_submits_exactly_one_ray_job[examples/on_policy_distillation/qwen3_5_35b_selfdistill/phase1_rlvr_teacher.sh]",
+      "FAILED tests/manual/launch_scripts/test_sh_launch_scripts.py::TestEveryLaunchScript::test_submits_exactly_one_ray_job[examples/on_policy_distillation/qwen3_5_35b_selfdistill/phase2_gb200.sh]",
+      "FAILED tests/manual/launch_scripts/test_sh_launch_scripts.py::TestEveryLaunchScript::test_submits_exactly_one_ray_job[examples/on_policy_distillation/qwen3_5_35b_selfdistill/phase2_opd_selfdistill.sh]"
+    ],
+    "documented_data_preparation_matches_observed_files": true
+  },
+  "limitations": [
+    "Eight evaluation samples and two training updates do not establish quality improvement.",
+    "OpenAI chat versus native inference parity remains unresolved.",
+    "Full launcher suite is not green; the same failures reproduce on the clean baseline.",
+    "Observed package inventory is not a portable environment lock.",
+    "Model weights are stored on ephemeral container disk.",
+    "No platform job API, durable registry, tenant auth, billing, or deployment controller implemented."
+  ]
+}

@@ -1,0 +1,79 @@
+### 0
+ray stop
+  --grace-period 60
+
+### 1
+export PYTHONUNBUFFERED=1 && ray start
+  --head
+  --node-ip-address 127.0.0.1
+  --num-gpus 4
+  --disable-usage-stats
+
+### 2
+nvidia-smi topo -m 2>/dev/null | grep -o 'NV[0-9][0-9]*' | wc -l
+
+### 3
+[launcher lifetime] ray job submit
+  --address=http://127.0.0.1:8265
+  --runtime-env-json='{"env_vars": {"PYTHONUNBUFFERED": "1", "NCCL_NVLS_ENABLE": "0", "no_proxy": "127.0.0.1,127.0.0.1", "MASTER_ADDR": "127.0.0.1", "TENSORBOARD_DIR": "/root/shared_data/tensorboard", "OMP_NUM_THREADS": "4", "PYTHONPATH": "<REPO_ROOT>:/root/Megatron-LM:/frozen/pythonpath"}}'
+  -- python3 <REPO_ROOT>/train.py 
+  --hf-checkpoint /root/models/Qwen3-0.6B
+  --save /root/shared_data/checkpoints
+  --save-interval 1
+  --prompt-data /root/datasets/platform-smoke/train.jsonl
+  --input-key prompt
+  --label-key label
+  --apply-chat-template
+  --apply-chat-template-kwargs '{"enable_thinking":false}'
+  --rollout-shuffle
+  --balance-data
+  --rm-type math
+  --num-rollout 2
+  --rollout-batch-size 4
+  --n-samples-per-prompt 4
+  --global-batch-size 16
+  --rollout-max-response-len 512
+  --rollout-temperature 1
+  --eval-interval 1
+  --eval-prompt-data gsm8k_smoke /root/datasets/platform-smoke/eval.jsonl
+  --n-samples-per-eval-prompt 1
+  --eval-max-response-len 512
+  --eval-temperature 0
+  --advantage-estimator grpo
+  --kl-coef 0
+  --kl-loss-coef 0
+  --entropy-coef 0
+  --eps-clip 0.2
+  --eps-clip-high 0.28
+  --optimizer adam
+  --lr 1e-06
+  --lr-decay-style constant
+  --weight-decay 0.1
+  --adam-beta1 0.9
+  --adam-beta2 0.98
+  --train-backend fsdp
+  --actor-num-nodes 1
+  --actor-num-gpus-per-node 2
+  --num-gpus-per-node 4
+  --rollout-num-gpus 2
+  --rollout-num-gpus-per-engine 1
+  --gradient-checkpointing
+  --attn-implementation flash_attention_2
+  --update-weight-buffer-size 134217728
+  --use-dynamic-batch-size
+  --max-tokens-per-gpu 2048
+  --sglang-attention-backend triton
+  --sglang-sampling-backend pytorch
+  --sglang-mem-fraction-static 0.45
+  --sglang-context-length 2048
+  --sglang-chunked-prefill-size 1024
+  --sglang-disable-cuda-graph
+  --sglang-log-level warning
+  --use-tensorboard
+  --tb-project-name platform
+  --tb-experiment-name qwen3-smoke
+  --deploy-component all
+
+### 4
+ray stop
+  --grace-period 60

@@ -456,3 +456,15 @@ def test_metadata_backup_restores_identity_and_ledger(platform, tmp_path):
     with sqlite3.connect(database) as db:
         assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert db.execute("SELECT SUM(amount) FROM ledger").fetchone()[0] == 100_000_000
+
+
+def test_compute_children_do_not_inherit_payment_or_cloud_secrets(monkeypatch):
+    from miles_platform.runtime import train_env
+
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_private")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "private-cloud-key")
+    monkeypatch.setenv("DATABASE_URL", "private-database-url")
+    monkeypatch.setenv("HF_HOME", "/cache/public-models")
+    env = train_env()
+    assert "STRIPE_SECRET_KEY" not in env and "AWS_SECRET_ACCESS_KEY" not in env and "DATABASE_URL" not in env
+    assert env["HF_HOME"] == "/cache/public-models" and env["CUDA_VISIBLE_DEVICES"] == "1,2,3"

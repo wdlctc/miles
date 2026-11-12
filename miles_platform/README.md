@@ -86,6 +86,18 @@ fraction). Ask for a final `\\boxed{}` answer. All other fields are discarded.
 The fixed recipe accepts 1–10 updates and has a 20-minute training timeout.
 The 37.5% demonstration evaluation gate is not a business-quality guarantee.
 
+The Jobs page includes a task selector, completed training-update count, raw
+reward mean, loss, gradient norm, learning rate, per-step curves/table and a
+scrollable log tail. It polls the authenticated, workspace-scoped
+`/api/jobs/{id}/telemetry` endpoint every five seconds. Metrics are parsed from
+the fixed FSDP recipe's rank-zero Miles log events; missing/nonfinite values are
+not replaced with zero. Progress counts observed optimizer steps, not elapsed
+time, and reaching the configured update count does not mean export/evaluation
+has finished. Historical imported runs have no reconstructed step metrics.
+The endpoint scans at most 16 MiB and explicitly reports truncation; the log
+panel shows the last 64 KB. Logs and model artifacts remain in workspace state
+after the job ends, so a page reload does not lose the measurements.
+
 Current workspace quotas: 3 active jobs, 10 registered trained models,
 20 datasets (5 MB train + 1 MB eval each), 20 active keys, 50 members/invitations,
 2 concurrent inference requests, at most 120 requests/minute/key,

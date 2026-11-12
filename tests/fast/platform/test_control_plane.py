@@ -9,6 +9,7 @@ from miles_platform.gateway import record
 from miles_platform.runtime import deploy
 from miles_platform.store import Store, digest, now
 from miles_platform.worker import tick
+from miles_platform.telemetry import parse_metrics
 
 
 @pytest.fixture
@@ -175,3 +176,46 @@ def test_worker_adopts_live_runner_and_cleans_cancelled_training(system, monkeyp
     tick(store)
     assert "stop" in commands and "stop_ray" in commands
     assert store.one("SELECT status FROM jobs WHERE id=?", (job["id"],))["status"] == "cancelled"
+
+
+def metric_line(kind, step, values):
+    return f"\x1b[36m(FSDPTrainRayActor pid=123)\x1b[0m [2026-11-12 06:15:30.135 actor_cell00000_rank00000] log_utils.py:580 - {kind} {step}: {values!r}\n"
+
+
+def test_measured_metrics_ignore_partial_lines_deduplicate_and_keep_missing():
+    rollout = metric_line("rollout", 0, {"rollout/raw_reward_filtered": 0, "rollout/rewards": 0.99})
+    step = metric_line("step", 0, {"train/step": 0, "train/loss": -1e-8, "train/grad_norm": float("nan")})
+    partial = metric_line("step", 1, {"train/step": 1, "train/loss": 0.5}).rstrip()
+    points, invalid = parse_metrics(rollout + step + step + partial, 2)
+    assert invalid
+    assert points == [{"step": 1, "completed": True, "reward": 0.0, "loss": -1e-8, "grad_norm": None}]
+    points, _ = parse_metrics(rollout + partial + "\n", 2)
+    assert [p["completed"] for p in points] == [False, True]
+    assert "learning_rate" not in points[0]
+    assert parse_metrics(step.replace("rank00000", "rank00001"), 2)[0] == []
+    assert parse_metrics(step.replace("step 0:", "step 5:"), 2)[0] == []
+    assert parse_metrics("Customer output log_utils.py:580 - step 0: {'train/step': 0}\n", 2)[0] == []
+
+
+def test_training_telemetry_updates_without_mutating_job_and_requires_auth(system):
+    client, store, _ = system
+    job = client.post("/api/jobs", json={"name": "observe", "dataset_id": "ds", "updates": 2}).json()
+    route = f"/api/jobs/{job['id']}/telemetry"
+    assert client.get(route).json()["samples"] == []
+    store.execute("UPDATE jobs SET status='running',started=? WHERE id=?", (now() - 10, job["id"]))
+    directory = store.root / "logs"
+    directory.mkdir(exist_ok=True)
+    log = directory / f"{job['id']}.log"
+    log.write_text(metric_line("rollout", 0, {"rollout/raw_reward_filtered": 0.25}))
+    first = client.get(route).json()
+    assert first["completed_updates"] == 0 and first["samples"][0]["reward"] == 0.25
+    with log.open("a") as stream:
+        stream.write(metric_line("step", 0, {"train/step": 0, "train/loss": -0.01, "train/grad_norm": 1.5}))
+    second = client.get(route).json()
+    assert second["completed_updates"] == 1 and second["total_updates"] == 2
+    assert second["elapsed_seconds"] >= 10 and "\x1b" not in second["logs"]
+    assert second["samples"][0]["grad_norm"] == 1.5
+    assert store.one("SELECT status FROM jobs WHERE id=?", (job["id"],))["status"] == "running"
+    assert client.get("/api/jobs/missing/telemetry").status_code == 404
+    client.post("/api/logout")
+    assert client.get(route).status_code == 401

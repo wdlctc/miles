@@ -25,6 +25,7 @@ from miles_platform.rewards import numeric
 from miles_platform.security import WorkspaceMiddleware
 from miles_platform.store import configured_store, digest, now, uid
 from miles_platform.tenancy import Registry, WorkspaceStore, resource_permission
+from miles_platform.telemetry import snapshot
 
 
 class Input(BaseModel):
@@ -232,6 +233,13 @@ def create_app(
         store.audit("cancel", job_id)
         billing.reconcile(store)
         return {"ok": True}
+
+    @app.get("/api/jobs/{job_id}/telemetry", dependencies=[Depends(admin)])
+    def telemetry(job_id: str):
+        job = store.one("SELECT * FROM jobs WHERE id=?", (job_id,))
+        if not job:
+            raise HTTPException(404, "Job not found")
+        return snapshot(store, job)
 
     @app.get("/api/jobs/{job_id}/logs", dependencies=[Depends(admin)], response_class=PlainTextResponse)
     def logs(job_id: str):

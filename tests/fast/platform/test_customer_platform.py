@@ -111,6 +111,17 @@ def fund(store, amount=100_000_000):
     store.execute("INSERT INTO ledger VALUES ('test-seed',?,?,'test_fixture','fixture')", (now(), amount))
 
 
+def test_telemetry_is_scoped_to_authenticated_workspace(platform):
+    alice, store, _ = customer(platform)
+    bob, _, _ = customer(platform, "bob@example.com")
+    fund(store)
+    job = alice.post("/api/jobs", json={"name": "private", "dataset_id": upload(alice)}).json()
+    route = f"/api/jobs/{job['id']}/telemetry"
+    assert alice.get(route).status_code == 200
+    assert bob.get(route).status_code == 404
+    assert platform[1].get(route).status_code == 404
+
+
 def payload(n):
     return json.dumps({"prompt": [{"role": "user", "content": f"{n}+1?"}], "label": str(n + 1)})
 

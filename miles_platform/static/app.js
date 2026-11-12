@@ -166,7 +166,8 @@ function jobs() {
       "从训练到导出与评测，跟踪每一步执行。",
       button("创建训练任务 ＋", "new-job", "", "primary"),
     ) +
-    `<div class="progress-steps"><span>01 创建任务</span>→<span>02 GPU 训练</span>→<span>03 导出权重</span>→<span>04 独立评测</span></div><section class="card"><div class="card-head"><h2>任务记录</h2><small>${state.jobs.length} 个记录 · 自动刷新</small></div>${jobTable(state.jobs, true)}</section>`
+    trainingMonitor() +
+    `<section class="card"><div class="card-head"><h2>任务记录</h2><small>${state.jobs.length} 个记录 · 自动刷新</small></div>${jobTable(state.jobs, true)}</section>`
   );
 }
 function models() {
@@ -241,6 +242,10 @@ function curlExample() {
 
 function render() {
   if (!state) return;
+  const logView = $("#training-log");
+  const logScroll = logView?.scrollTop || 0;
+  const followLog = !logView || logView.scrollHeight - logScroll - logView.clientHeight < 80;
+  const expandedSamples = $(".training-samples")?.open;
   const navigation = Object.keys(titles)
     .filter(visiblePane)
     .map(
@@ -267,6 +272,10 @@ function render() {
     account: renderAccount,
     customers: renderCustomers,
   }[pane]();
+  if (pane === "jobs" && $("#training-log")) {
+    $("#training-log").scrollTop = followLog ? $("#training-log").scrollHeight : logScroll;
+    $(".training-samples").open = !!expandedSamples;
+  }
   if (pane === "playground") {
     conversation = [];
     $("#chat-form").addEventListener("submit", sendChat);
@@ -276,6 +285,7 @@ async function refresh(redraw = true) {
   try {
     state = await (await api("/api/state")).json();
     await refreshAccount();
+    await refreshTraining();
     $("#login").hidden = true;
     $("#shell").hidden = false;
     const healthy =
@@ -353,7 +363,7 @@ async function actions(action, id) {
       `<div class="notice">使用 Qwen3-0.6B · FSDP GRPO。训练使用 3 张 GPU，在线推理保持运行；单任务最长训练 20 分钟。</div><label>任务名称<input name="name" required maxlength="80" value="Qwen3 · ${new Date().toLocaleDateString("zh-CN")}"></label><label>数据集<select name="dataset_id">${state.datasets.map((d) => `<option value="${d.id}" ${d.id === id ? "selected" : ""}>${escape(d.name)} · ${d.train_rows} / ${d.eval_rows} 条</option>`).join("")}</select></label><div class="form-row"><label>更新轮数<input name="updates" type="number" min="1" max="10" value="2" required><small>每轮 4 个 prompt × 4 个回答</small></label><label>学习率<input name="learning_rate" type="number" min="0.0000001" max="0.00001" step="0.0000001" value="0.000001" required></label></div>`,
       "开始训练",
       async (f) => {
-        await post(
+        const created = await post(
           "/api/jobs",
           {
             name: f.get("name"),
@@ -363,6 +373,8 @@ async function actions(action, id) {
           },
           true,
         );
+        selectedTrainingJob = created.id;
+        trainingData = null;
         closeDialog();
         location.hash = "jobs";
         await refresh();
@@ -614,6 +626,7 @@ window.addEventListener("hashchange", async () => {
     }
     pane = next;
     await refreshAccount();
+    await refreshTraining();
     render();
   }
 });

@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -13,11 +14,11 @@ import httpx
 from miles_platform.store import now, uid
 
 REPO = Path(__file__).resolve().parents[1]
-SLOTS = {"a": 18081, "b": 18082}
+SLOTS = {letter: 18081 + index for index, letter in enumerate("abcd")}
 
 
 def supervise(action, service, check=True):
-    if action not in {"start", "stop", "status"} or service not in {"runner", "slot-a", "slot-b"}:
+    if action not in {"start", "stop", "status"} or service not in {"runner", *("slot-" + s for s in SLOTS)}:
         raise ValueError("Unsupported supervisor action")
     result = subprocess.run(
         ["supervisorctl", action, "miles-platform-" + service], capture_output=True, text=True, timeout=150
@@ -29,6 +30,8 @@ def supervise(action, service, check=True):
 
 def phase(store, job_id, text):
     print(text, flush=True)
+    if hasattr(store, "registry"):
+        store.registry.active(store.tenant_id)
     if store.one("SELECT status FROM jobs WHERE id=?", (job_id,))["status"] == "cancel_requested":
         raise RuntimeError("Cancellation requested")
     store.execute("UPDATE jobs SET phase=? WHERE id=?", (text, job_id))
@@ -88,9 +91,12 @@ def validate_artifact(directory, base):
 
 
 def train(store, job):
+    if shutil.disk_usage(store.root).free < 20 * 1024**3:
+        raise RuntimeError("Training requires at least 20 GiB of available artifact storage")
     params = json.loads(job["params"])
     dataset = store.one("SELECT * FROM datasets WHERE id=?", (params["dataset_id"],))
     state = store.root.parent
+    base_models = getattr(store, "base_models", state / "models")
     output = store.root / "runs" / job["id"]
     model_id = uid("mdl")
     exported = state / "models" / model_id
@@ -99,7 +105,7 @@ def train(store, job):
         sys.executable,
         "scripts/run_qwen3_0_6b_platform.py",
         "--model-dir",
-        str(state / "models"),
+        str(base_models),
         "--data-dir",
         dataset["path"],
         "--output-dir",
@@ -112,9 +118,9 @@ def train(store, job):
         str(params["updates"]),
         "--learning-rate",
         str(params["learning_rate"]),
+        "--numeric-reward",
     ]
-    rate = store.setting("rates").get("gpu_hour")
-    store.execute("UPDATE jobs SET rate=? WHERE id=?", (rate, job["id"]))
+    rate = job["rate"]
     started = now()
     store.execute("UPDATE jobs SET training_started=? WHERE id=?", (started, job["id"]))
     try:
@@ -137,13 +143,13 @@ def train(store, job):
             "--output-dir",
             str(exported),
             "--origin-hf-dir",
-            str(state / "models/Qwen3-0.6B"),
+            str(base_models / "Qwen3-0.6B"),
         ],
         cwd=REPO,
         timeout=300,
         check=True,
     )
-    evidence = validate_artifact(exported, state / "models/Qwen3-0.6B")
+    evidence = validate_artifact(exported, base_models / "Qwen3-0.6B")
     store.execute(
         "INSERT INTO models VALUES (?,?,?,?,?,?,?,?,?)",
         (
@@ -188,7 +194,18 @@ def ensure_server(store, model_id, job_id):
         endpoint = f"http://127.0.0.1:{row['port']}"
         if row["model_id"] == model_id and healthy(endpoint, model_id):
             return endpoint
-    slot = next(name for name, port in SLOTS.items() if not active or active["endpoint"] != f"http://127.0.0.1:{port}")
+    candidates = [
+        name for name, port in SLOTS.items() if not active or active["endpoint"] != f"http://127.0.0.1:{port}"
+    ]
+    if hasattr(store, "registry"):
+        # The global runner serializes allocation. Never evict another tenant's
+        # active or standby engine, even when its local slots table is empty.
+        owned = {r["id"]: r["tenant"] for r in store.registry.data.rows("SELECT * FROM engines")}
+        candidates = [s for s in candidates if owned.get(s, store.tenant_id) == store.tenant_id]
+        candidates.sort(key=lambda s: (s not in owned, s))
+    if not candidates:
+        raise RuntimeError("Serving capacity is full; the operator must add capacity before another deployment")
+    slot = candidates[0]
     endpoint = f"http://127.0.0.1:{SLOTS[slot]}"
     # A retired slot may still be finishing requests from before the route switch.
     deadline = now() + 130
@@ -203,6 +220,10 @@ def ensure_server(store, model_id, job_id):
         time.sleep(2)
     supervise("stop", "slot-" + slot, check=False)
     store.execute("INSERT OR REPLACE INTO slots VALUES (?,?,?)", (slot, model_id, SLOTS[slot]))
+    if hasattr(store, "registry"):
+        store.registry.data.execute(
+            "INSERT OR REPLACE INTO engines VALUES (?,?,?,?)", (slot, store.tenant_id, model_id, SLOTS[slot])
+        )
     supervise("start", "slot-" + slot)
     deadline = now() + 180
     while now() < deadline:
@@ -214,7 +235,7 @@ def ensure_server(store, model_id, job_id):
 
 
 def evaluate(store, job):
-    from miles.rollout.rm_hub.math_utils import grade_answer_verl
+    from miles_platform.rewards import grade
 
     model = store.one("SELECT * FROM models WHERE id=?", (job["model_id"],))
     dataset = store.one("SELECT * FROM datasets WHERE id=?", (model["dataset_id"],))
@@ -242,7 +263,7 @@ def evaluate(store, job):
             results.append(
                 {
                     "index": index,
-                    "correct": bool(grade_answer_verl(choice["message"]["content"], row["label"])),
+                    "correct": grade(choice["message"]["content"], row["label"]),
                     "finish_reason": choice["finish_reason"],
                     "usage": data.get("usage"),
                 }

@@ -7,6 +7,7 @@ import traceback
 
 from miles_platform.runtime import SLOTS, deploy, evaluate, stop_training, supervise, train
 from miles_platform.store import now
+from miles_platform import billing
 
 
 def run_job(store):
@@ -90,15 +91,47 @@ def tick(store):
 def work(store):
     with (store.root / "worker.lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        active = store.active()
-        for slot, port in SLOTS.items():
-            if active and active["endpoint"] == f"http://127.0.0.1:{port}":
-                status = supervise("status", "slot-" + slot, check=False)
-                if "RUNNING" not in status and "STARTING" not in status:
-                    supervise("start", "slot-" + slot)
+        registry = store.registry
+        for workspace in registry.stores():
+            active = workspace.active()
+            for slot, port in SLOTS.items():
+                if active and active["endpoint"] == f"http://127.0.0.1:{port}":
+                    status = supervise("status", "slot-" + slot, check=False)
+                    if "RUNNING" not in status and "STARTING" not in status:
+                        supervise("start", "slot-" + slot)
         while True:
             try:
-                tick(store)
+                tick_workspaces(registry)
             except Exception:
                 traceback.print_exc()
             time.sleep(2)
+
+
+def tick_workspaces(registry):
+    stores = registry.stores()
+    running, queued = [], []
+    for workspace in stores:
+        workspace.set("worker_heartbeat", now())
+        billing.reconcile(workspace)
+        if workspace.one("SELECT id FROM jobs WHERE status IN ('running','cancel_requested') LIMIT 1"):
+            running.append(workspace)
+        elif workspace.one("SELECT id FROM jobs WHERE status='queued' LIMIT 1"):
+            state = registry.data.one("SELECT status FROM tenants WHERE id=?", (workspace.tenant_id,))
+            if state["status"] == "active":
+                queued.append(workspace)
+    if len(running) > 1:
+        raise RuntimeError("Multiple active runners detected; refusing to start another job")
+    if running:
+        # The runner process and its tenant assignment survive worker restarts.
+        tick(running[0])
+        return
+    if queued:
+        status = supervise("status", "runner", check=False)
+        if any(value in status for value in ("RUNNING", "STARTING", "STOPPING")):
+            return
+        previous = registry.default.setting("runner_tenant", "default")
+        ids = [s.tenant_id for s in queued]
+        index = (ids.index(previous) + 1) % len(ids) if previous in ids else 0
+        selected = queued[index]
+        registry.default.set("runner_tenant", selected.tenant_id)
+        tick(selected)

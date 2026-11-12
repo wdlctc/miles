@@ -108,6 +108,11 @@ class Store:
         )
 
     def enqueue(self, kind, name, params, model_id=None, idem=None):
+        # Import here to keep storage construction independent of API/billing.
+        from miles_platform import billing
+
+        billing.prepare(self)
+        rates = billing.pricing(self)
         request_hash = digest(json.dumps([kind, name, params, model_id], sort_keys=True))
         with self.connect(write=True) as db:
             if idem:
@@ -117,11 +122,36 @@ class Store:
                         raise ValueError("Idempotency key was already used with different parameters")
                     return dict(old)
             job_id = uid("job")
+            if (
+                db.execute(
+                    "SELECT COUNT(*) FROM jobs WHERE status IN ('queued','running','cancel_requested')"
+                ).fetchone()[0]
+                >= 3
+            ):
+                raise ValueError("Workspace queue quota reached (3 active jobs)")
+            models = db.execute("SELECT COUNT(*) FROM models").fetchone()[0]
+            pending = db.execute(
+                "SELECT COUNT(*) FROM jobs WHERE kind='train' AND status IN ('queued','running','cancel_requested')"
+            ).fetchone()[0]
+            if models + pending >= 10 and kind == "train":
+                raise ValueError("Workspace model quota reached (10); contact the operator")
+            if not getattr(self, "exempt", True) and kind != "train":
+                if (
+                    billing.balance(db)["available_microusd"] <= 0
+                    or db.execute("SELECT 1 FROM orders WHERE disputed=1 LIMIT 1").fetchone()
+                ):
+                    from fastapi import HTTPException
+
+                    raise HTTPException(402, "Add prepaid credits before evaluating or deploying")
+            if kind == "train":
+                billing.reserve(db, self, job_id, "training", billing.training_quote(self, rates))
             db.execute(
                 """INSERT INTO jobs(id,kind,name,status,phase,params,model_id,created,idem,request_hash)
                           VALUES (?,?,?,'queued','等待执行',?,?,?,?,?)""",
                 (job_id, kind, name, json.dumps(params), model_id, now(), idem, request_hash),
             )
+            if kind == "train":
+                db.execute("UPDATE jobs SET rate=? WHERE id=?", (rates.get("gpu_hour"), job_id))
             return dict(db.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone())
 
 

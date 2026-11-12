@@ -30,6 +30,10 @@ const titles = {
   keys: "API 密钥",
   usage: "用量与费用",
   datasets: "数据集",
+  billing: "账单 · Billing",
+  team: "团队 · Team",
+  account: "账户 · Account",
+  customers: "客户 · Customers",
 };
 const paths = {
   overview: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
@@ -114,6 +118,7 @@ function head(title, description, action = "") {
   return `<div class="page-head"><div><span class="eyebrow">MILES PLATFORM / ${pane.toUpperCase()}</span><h1>${title}</h1><p>${description}</p></div><div class="actions">${action}</div></div>`;
 }
 function button(label, action, id = "", cls = "") {
+  if (!allowedAction(action)) return "";
   return `<button class="${cls}" data-action="${action}" data-id="${escape(id)}">${label}</button>`;
 }
 function empty(text, detail, action = "") {
@@ -237,9 +242,10 @@ function curlExample() {
 function render() {
   if (!state) return;
   $("#navigation").innerHTML = Object.keys(titles)
+    .filter(visiblePane)
     .map(
       (key) =>
-        `<a href="#${key}" class="${pane === key ? "active" : ""}"><svg viewBox="0 0 24 24"><path d="${paths[key]}"/></svg>${titles[key]}</a>`,
+        `<a href="#${key}" class="${pane === key ? "active" : ""}"><svg viewBox="0 0 24 24"><path d="${paths[key] || paths.usage}"/></svg>${titles[key]}</a>`,
     )
     .join("");
   $("#breadcrumb").textContent = titles[pane];
@@ -252,6 +258,10 @@ function render() {
     usage,
     datasets,
     playground,
+    billing: renderBilling,
+    team: renderTeam,
+    account: renderAccount,
+    customers: renderCustomers,
   }[pane]();
   if (pane === "playground") {
     conversation = [];
@@ -261,6 +271,7 @@ function render() {
 async function refresh(redraw = true) {
   try {
     state = await (await api("/api/state")).json();
+    await refreshAccount();
     $("#login").hidden = true;
     $("#shell").hidden = false;
     const healthy =
@@ -320,6 +331,7 @@ function confirmAction(title, message, callback) {
   });
 }
 async function actions(action, id) {
+  if (await accountAction(action, id)) return;
   if (action === "logout") {
     if (busyChat) return toast("请等待当前回答完成");
     await post("/api/logout");
@@ -572,6 +584,7 @@ $("#login-form").addEventListener("submit", async (e) => {
   b.disabled = true;
   try {
     await post("/api/login", {
+      email: new FormData(e.target).get("email"),
       password: new FormData(e.target).get("password"),
     });
     e.target.reset();
@@ -587,7 +600,7 @@ $("#logout").addEventListener("click", async () => {
   await post("/api/logout");
   showLogin();
 });
-window.addEventListener("hashchange", () => {
+window.addEventListener("hashchange", async () => {
   const next = location.hash.slice(1);
   if (titles[next]) {
     if (busyChat) {
@@ -596,6 +609,7 @@ window.addEventListener("hashchange", () => {
       return;
     }
     pane = next;
+    await refreshAccount();
     render();
   }
 });
@@ -608,6 +622,16 @@ async function pollRuntime() {
   } catch (_) {}
 }
 async function start() {
+  if (
+    location.hash.startsWith("#invite=") ||
+    location.hash.startsWith("#reset=")
+  ) {
+    showLogin();
+    return acceptInvitation(
+      location.hash.split("=")[1],
+      location.hash.startsWith("#reset="),
+    );
+  }
   pane = titles[location.hash.slice(1)] ? location.hash.slice(1) : "overview";
   await refresh(false);
   if (state) {

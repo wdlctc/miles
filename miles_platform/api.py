@@ -1,8 +1,6 @@
 """Single-workspace administration API and static console."""
 
 import csv
-import hashlib
-import hmac
 import io
 import json
 import secrets
@@ -19,8 +17,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from miles_platform.bootstrap import bootstrap
+from miles_platform import billing
+from miles_platform.accounts import install_accounts
 from miles_platform.gateway import Chat, proxy
+from miles_platform.payments import PaymentConfig, install_payments
+from miles_platform.rewards import numeric
+from miles_platform.security import WorkspaceMiddleware
 from miles_platform.store import configured_store, digest, now, uid
+from miles_platform.tenancy import Registry, WorkspaceStore, resource_permission
 
 
 class Input(BaseModel):
@@ -66,6 +70,7 @@ def clean_rows(text, minimum, maximum):
             Chat(messages=row["prompt"])
             if not isinstance(row["label"], (str, int, float)) or not str(row["label"]).strip():
                 raise ValueError("label must be nonempty")
+            numeric(row["label"])
         except (ValueError, KeyError, TypeError) as exc:
             raise HTTPException(422, f"Invalid JSONL row {len(rows) + 1}: {exc}") from None
         signature = digest(json.dumps(row["prompt"], sort_keys=True, ensure_ascii=False))
@@ -78,16 +83,30 @@ def clean_rows(text, minimum, maximum):
     return rows, seen
 
 
-def create_app(store=None, client_factory=httpx.AsyncClient):
+def create_app(
+    store=None, client_factory=httpx.AsyncClient, payment_config=None, payment_client_factory=httpx.AsyncClient
+):
     store = store or configured_store()
     bootstrap(store)
     # The supported deployment has one API process. Its old in-flight requests
     # cannot survive an API restart; mark them incomplete, never invent usage.
-    store.execute("UPDATE usage SET status=599,ended=? WHERE status=102 AND ended IS NULL", (now(),))
-    app = FastAPI(title="Miles Platform", version="0.1.0", docs_url="/api/docs", redoc_url=None)
+    registry = Registry(store)
+    for workspace in registry.stores():
+        billing.prepare(workspace)
+        workspace.execute("UPDATE usage SET status=599,ended=? WHERE status=102 AND ended IS NULL", (now(),))
+        billing.reconcile(workspace)
+    config = payment_config or PaymentConfig()
+    app = FastAPI(title="Miles Platform", version="0.2.0", docs_url="/api/docs", redoc_url=None)
     app.state.store = store
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "testserver"])
-    attempts = []
+    app.state.registry = registry
+    app.add_middleware(WorkspaceMiddleware, registry=registry)
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=list({"localhost", "127.0.0.1", "testserver", urlparse(config.origin).hostname or "localhost"}),
+    )
+    install_accounts(app, registry, secure=urlparse(config.origin).scheme == "https")
+    install_payments(app, registry, config, payment_client_factory)
+    store = WorkspaceStore()
 
     @app.middleware("http")
     async def security(request, call_next):
@@ -102,6 +121,19 @@ def create_app(store=None, client_factory=httpx.AsyncClient):
         if length > 6_100_000:
             return PlainTextResponse("Request too large", status_code=413)
         response = await call_next(request)
+        principal = getattr(request.state, "principal", None)
+        if principal and request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            registry.store(principal["tenant"]).audit(
+                "api_action",
+                json.dumps(
+                    {
+                        "actor": principal["id"],
+                        "method": request.method,
+                        "path": request.url.path,
+                        "status": response.status_code,
+                    }
+                ),
+            )
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
         response.headers["Content-Security-Policy"] = (
@@ -116,11 +148,9 @@ def create_app(store=None, client_factory=httpx.AsyncClient):
         return response
 
     def admin(request: Request):
-        token = request.cookies.get("miles_session", "")
-        session = store.one("SELECT expires FROM sessions WHERE hash=?", (digest(token),))
-        if not session or session["expires"] <= now():
-            raise HTTPException(401, "Please sign in")
-        return "admin"
+        principal = request.state.principal
+        resource_permission(principal, request.method, request.url.path)
+        return principal
 
     def api_key(authorization: str = Header(default="")):
         if not authorization.startswith("Bearer "):
@@ -145,29 +175,6 @@ def create_app(store=None, client_factory=httpx.AsyncClient):
     @app.get("/health")
     def health():
         return {"status": "ok"}
-
-    @app.post("/api/login")
-    def login(body: Login, response: Response):
-        attempts[:] = [t for t in attempts if t > now() - 60]
-        if len(attempts) >= 8:
-            raise HTTPException(429, "Too many login attempts; retry in one minute")
-        attempts.append(now())
-        stored = store.setting("admin_hash")
-        actual = hashlib.scrypt(body.password.encode(), salt=stored["salt"].encode(), n=16384, r=8, p=1).hex()
-        if not hmac.compare_digest(actual, stored["hash"]):
-            raise HTTPException(401, "Incorrect password")
-        token = secrets.token_urlsafe(32)
-        store.execute("DELETE FROM sessions WHERE expires<?", (now(),))
-        store.execute("INSERT INTO sessions VALUES (?,?)", (digest(token), now() + 8 * 3600))
-        response.set_cookie("miles_session", token, httponly=True, samesite="strict", max_age=8 * 3600)
-        store.audit("login", "Operator signed in")
-        return {"ok": True}
-
-    @app.post("/api/logout", dependencies=[Depends(admin)])
-    def logout(request: Request, response: Response):
-        store.execute("DELETE FROM sessions WHERE hash=?", (digest(request.cookies["miles_session"]),))
-        response.delete_cookie("miles_session")
-        return {"ok": True}
 
     @app.get("/api/state", dependencies=[Depends(admin)])
     def state():
@@ -200,7 +207,7 @@ def create_app(store=None, client_factory=httpx.AsyncClient):
             "keys": store.rows("SELECT id,name,prefix,created,revoked,rpm FROM api_keys ORDER BY created DESC"),
             "usage": store.rows("SELECT * FROM usage ORDER BY created DESC LIMIT 50"),
             "totals": totals,
-            "rates": store.setting("rates"),
+            "rates": billing.pricing(store),
             "quality_threshold": store.setting("quality_threshold"),
             "worker_heartbeat": store.setting("worker_heartbeat"),
             "audit": store.rows("SELECT * FROM audit ORDER BY id DESC LIMIT 15"),
@@ -223,6 +230,7 @@ def create_app(store=None, client_factory=httpx.AsyncClient):
             elif job["status"] == "running":
                 db.execute("UPDATE jobs SET status='cancel_requested' WHERE id=?", (job_id,))
         store.audit("cancel", job_id)
+        billing.reconcile(store)
         return {"ok": True}
 
     @app.get("/api/jobs/{job_id}/logs", dependencies=[Depends(admin)], response_class=PlainTextResponse)
@@ -260,33 +268,52 @@ def create_app(store=None, client_factory=httpx.AsyncClient):
 
     @app.post("/api/datasets", dependencies=[Depends(admin)])
     def dataset(body: Dataset):
+        if store.one("SELECT COUNT(*) n FROM datasets")["n"] >= 20:
+            raise HTTPException(409, "Workspace dataset quota reached (20)")
         training, train_hashes = clean_rows(body.train_jsonl, 4, 5000)
         evaluation, eval_hashes = clean_rows(body.eval_jsonl, 1, 64)
         if train_hashes & eval_hashes:
             raise HTTPException(422, "Training and evaluation prompts must be disjoint")
         dataset_id = uid("ds")
         directory = store.root / "datasets" / dataset_id
-        directory.mkdir(parents=True, mode=0o700)
         content = []
-        for filename, rows in [("train", training), ("eval", evaluation)]:
+        for rows in (training, evaluation):
             text = "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows)
-            (directory / f"{filename}.jsonl").write_text(text)
             content.append(text)
-        store.execute(
-            "INSERT INTO datasets VALUES (?,?,?,?,?,?,?)",
-            (dataset_id, body.name, str(directory), len(training), len(evaluation), now(), digest("".join(content))),
-        )
+        with store.connect(write=True) as db:
+            if db.execute("SELECT COUNT(*) FROM datasets").fetchone()[0] >= 20:
+                raise HTTPException(409, "Workspace dataset quota reached (20)")
+            directory.mkdir(parents=True, mode=0o700)
+            for filename, text in zip(("train", "eval"), content, strict=True):
+                (directory / f"{filename}.jsonl").write_text(text)
+            db.execute(
+                "INSERT INTO datasets VALUES (?,?,?,?,?,?,?)",
+                (
+                    dataset_id,
+                    body.name,
+                    str(directory),
+                    len(training),
+                    len(evaluation),
+                    now(),
+                    digest("".join(content)),
+                ),
+            )
         store.audit("dataset", dataset_id)
         return {"id": dataset_id}
 
     @app.post("/api/keys", dependencies=[Depends(admin)])
     def create_key(body: Key):
-        token = "mp_" + secrets.token_urlsafe(32)
+        if store.one("SELECT COUNT(*) n FROM api_keys WHERE revoked IS NULL")["n"] >= 20:
+            raise HTTPException(409, "Workspace key quota reached (20)")
+        token = "mp." + store.tenant_id + "." + secrets.token_urlsafe(32)
         key_id = uid("key")
-        store.execute(
-            "INSERT INTO api_keys VALUES (?,?,?,?,?,NULL,?)",
-            (key_id, body.name, digest(token), token[:10] + "…" + token[-4:], now(), body.rpm),
-        )
+        with store.connect(write=True) as db:
+            if db.execute("SELECT COUNT(*) FROM api_keys WHERE revoked IS NULL").fetchone()[0] >= 20:
+                raise HTTPException(409, "Workspace key quota reached (20)")
+            db.execute(
+                "INSERT INTO api_keys VALUES (?,?,?,?,?,NULL,?)",
+                (key_id, body.name, digest(token), token[:10] + "…" + token[-4:], now(), body.rpm),
+            )
         store.audit("key_created", key_id)
         return {"id": key_id, "secret": token}
 
@@ -298,7 +325,7 @@ def create_app(store=None, client_factory=httpx.AsyncClient):
 
     @app.put("/api/rates", dependencies=[Depends(admin)])
     def rates(body: Rates):
-        store.set("rates", body.model_dump())
+        registry.default.set("rates", body.model_dump())
         store.audit("rates", json.dumps(body.model_dump()))
         return {"ok": True}
 
@@ -348,7 +375,7 @@ def create_app(store=None, client_factory=httpx.AsyncClient):
         return await proxy(store, body, {"id": "console", "rpm": 30}, client_factory)
 
     @app.get("/api/runtime", dependencies=[Depends(admin)])
-    async def runtime():
+    async def runtime(request: Request):
         deployment = store.active()
         serving = False
         if deployment:
@@ -358,6 +385,8 @@ def create_app(store=None, client_factory=httpx.AsyncClient):
             except httpx.HTTPError:
                 pass
         gpus = []
+        if not request.state.principal["operator"]:
+            return {"serving_healthy": serving, "gpus": [], "observed": now()}
         try:
             process = subprocess.run(
                 [

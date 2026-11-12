@@ -45,6 +45,10 @@ const paths = {
   usage: "M4 20V10m8 10V4m8 16v-7M2 21h20",
   datasets:
     "M4 5c0-4 16-4 16 0s-16 4-16 0v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0",
+  billing: "M3 5h18v14H3zM3 9h18M7 15h4",
+  team: "M9 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M2 21v-2a7 7 0 0 1 14 0v2M17 5a4 4 0 0 1 0 8m1 3a5 5 0 0 1 4 5",
+  account: "M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10M3 22a9 9 0 0 1 18 0",
+  customers: "M4 21V3h12v18M16 9h4v12M8 7h4M8 11h4M8 15h4M2 21h20",
 };
 let state,
   runtime = { gpus: [] },
@@ -125,7 +129,7 @@ function empty(text, detail, action = "") {
   return `<div class="empty"><div class="empty-symbol">◇</div><h3>${text}</h3><p>${detail}</p>${action}</div>`;
 }
 function metric(label, value, note, word = false) {
-  return `<div class="metric"><div class="metric-top">${label}<span>↗</span></div><div class="metric-value ${word ? "word" : ""}">${escape(value)}</div><small>${note}</small></div>`;
+  return `<div class="metric"><div class="metric-top">${label}<span class="metric-mark" aria-hidden="true">▦</span></div><div class="metric-value ${word ? "word" : ""}">${escape(value)}</div><small>${note}</small></div>`;
 }
 function modelName(id) {
   return state.models.find((m) => m.id === id)?.name || id || "—";
@@ -147,11 +151,7 @@ function overview() {
     active = state.active,
     working = state.job_totals.active || 0;
   return (
-    head(
-      "工作区概览",
-      "让每一次模型迭代，都走向可用的服务。",
-      button("创建训练任务 ＋", "new-job", "", "primary"),
-    ) +
+    `<section class="overview-intro"><div class="intro-copy"><span class="eyebrow">YOUR MODELS. YOUR INFRASTRUCTURE.</span><h1>你的模型。<br>从训练到上线。</h1><p>在一个工作区，完成训练、评测与部署。<br>让每一次迭代，都有迹可循。</p><div class="actions">${button("创建训练任务 ＋", "new-job", "", "primary")}${button("打开 Playground ↗", "playground")}</div></div><div class="grid-art" aria-hidden="true"><div class="grid-tiles">${"<i></i>".repeat(35)}</div><span class="grid-caption">01 TRAIN &nbsp; / &nbsp; 02 EVALUATE &nbsp; / &nbsp; 03 SERVE</span></div></section>` +
     `<div class="metrics">${metric("推理请求", number(t.requests), "来自 API 与 Playground 的真实请求")}${metric("累计 Tokens", number((t.prompt_tokens || 0) + (t.completion_tokens || 0)), "输入与输出 · 按响应中的 usage 计量")}${metric("训练与操作", number(state.job_totals.jobs), working ? `${working} 个任务正在执行或排队` : "当前队列空闲")}${metric("当前服务版本", active ? modelName(active.model_id) : "尚未部署", "统一端点 miles-default", true)}</div>
     <div class="grid-main"><section class="card"><div class="card-head"><h2>最近任务</h2><a class="link-button" href="#jobs">查看全部 →</a></div>${jobTable(state.jobs.slice(0, 5))}</section>
     <section class="card hero-card"><div class="card-head"><h2>在线推理</h2><span class="pill">${runtime.serving_healthy ? "● 服务健康" : "检查中"}</span></div><div class="card-body"><h3>${escape(active ? modelName(active.model_id) : "等待部署")}</h3><p>独立推理服务 · OpenAI 兼容接口</p><div class="endpoint">${location.origin}/v1</div><div class="detail-line"><span>模型别名</span><strong>miles-default</strong></div><div class="detail-line"><span>请求保护</span><strong>API Key + 请求限额</strong></div>${button("在 Playground 中试用 ↗", "playground")}</div></section></div>

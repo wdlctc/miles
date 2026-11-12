@@ -58,7 +58,7 @@ function renderBilling() {
     wallet.mode === "live"
       ? "LIVE · USD"
       : "TEST MODE · 测试余额不能转为真实余额";
-  const balance = `<div class="metrics">${metric("可用余额 / Available", money(wallet.available_microusd / 1e6), status)}${metric("预留费用 / Reserved", money(wallet.held_microusd / 1e6), "任务结束后按用量结算，剩余预留自动释放")}${metric("已入账余额 / Balance", money(wallet.balance_microusd / 1e6), wallet.exempt ? "内部工作区 · 免扣费" : "预付费 · 余额不足时暂停新请求")}</div>`;
+  const balance = `<div class="metrics billing-metrics">${metric("可用余额 / Available", money(wallet.available_microusd / 1e6), status)}${metric("预留费用 / Reserved", money(wallet.held_microusd / 1e6), "任务结束后按用量结算，剩余预留自动释放")}${metric("已入账余额 / Balance", money(wallet.balance_microusd / 1e6), wallet.exempt ? "内部工作区 · 免扣费" : "预付费 · 余额不足时暂停新请求")}</div>`;
   const packs = Object.entries(wallet.packs)
     .map(
       ([key, cents]) =>

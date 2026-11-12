@@ -375,6 +375,21 @@ def test_live_requires_launch_acceptance_and_test_wallet_cannot_switch(platform,
     blockers = PaymentConfig().blockers()
     assert any("HTTPS" in b for b in blockers)
     assert any("restore" in b for b in blockers)
+    monkeypatch.setenv("MILES_PUBLIC_URL", "https://testserver")
+    monkeypatch.setenv("MILES_TERMS_URL", "https://testserver/terms")
+    monkeypatch.setenv("MILES_PRIVACY_URL", "https://testserver/privacy")
+    monkeypatch.setenv("MILES_SUPPORT_EMAIL", "support@example.com")
+    monkeypatch.setenv("MILES_LIVE_ENABLED", "true")
+    monkeypatch.setenv("MILES_DURABLE_STORAGE_ACCEPTED", "true")
+    config = PaymentConfig()
+    assert config.blockers() == []
+    app = create_app(platform[0].state.store, payment_config=config, payment_client_factory=platform[2].client)
+    live = TestClient(app, base_url="https://testserver")
+    assert live.post("/api/login", json={"email": "alice@example.com", "password": PASSWORD}).status_code == 200
+    before = len(platform[2].requests)
+    result = live.post("/api/billing/checkout", json={"pack": "starter"}, headers={"Idempotency-Key": "live-attempt"})
+    assert result.status_code == 409 and "Test balances" in result.text
+    assert len(platform[2].requests) == before
 
 
 def test_numeric_grader_rejects_executable_and_expensive_expressions():

@@ -1,5 +1,10 @@
 # GPU training-to-serving prototype
 
+Historical first milestone. The subsequently implemented console, job queue,
+model registry, deployment gateway, API keys and usage ledger are documented in
+the [current platform runbook](../../miles_platform/README.md). The direct
+SGLang endpoint described below remains a private underlying inference service.
+
 This fork's first engineering milestone ran on 2026-11-12 UTC. It connects
 Miles FSDP GRPO, checkpoint export, and a separate SGLang inference service.
 It is a small integration experiment, not a model-quality benchmark or a
@@ -201,7 +206,6 @@ errors. A clean archive of the baseline produced 659 passes and the identical
 include optional `megatron`/`tap` imports and upstream snapshot discrepancies;
 the full suite is therefore not green. See [validation.json](validation.json).
 
-Next engineering work is persistent job/model metadata, job creation and
-cancellation, independent evaluation with matched inference settings, durable
-artifact storage, and a versioned deployment gateway. The running endpoint is
-an engineering demonstration until those acceptance criteria are met.
+The [platform runbook](../../miles_platform/README.md) tracks subsequent completed
+work and remaining production limitations. This document preserves the original
+experiment and its unresolved cross-interface quality comparison.

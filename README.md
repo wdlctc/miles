@@ -1,4 +1,4 @@
-> Fork addition (2026-11-12): This fork explores an independently operated post-training and inference platform built on Miles. Start with the [platform design](PLATFORM.md) and the [GPU training-to-serving smoke run](deployments/platform-smoke/README.md). The GPU prototype runs; platform control services are not implemented yet.
+> Fork addition (2026-11-12): This fork builds an independently operated post-training and inference platform on Miles. The [single-workspace console](miles_platform/README.md) supports real training, evaluation, deployment, API keys and metering. See the [platform direction](PLATFORM.md) and [first GPU experiment](deployments/platform-smoke/README.md) for scope and evidence.
 
 <div align="center">
 

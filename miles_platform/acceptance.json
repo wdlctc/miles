@@ -1,0 +1,130 @@
+{
+  "observed_at_utc": "2026-11-12",
+  "scope": "single-workspace prototype, Qwen3-0.6B FSDP GRPO on 4 A100 GPUs",
+  "cpu_checks": {
+    "tests_passed": 8,
+    "tests_failed": 0,
+    "black": "passed",
+    "ruff": "passed",
+    "javascript_syntax": "passed"
+  },
+  "real_api_acceptance": {
+    "api_authentication": true,
+    "ordinary_inference": true,
+    "streaming_inference": true,
+    "rate_limit_429": true,
+    "revoked_key_401": true,
+    "queued_cancellation": true,
+    "csv_export": true,
+    "inference_usage_records": [
+      {
+        "status": 200,
+        "prompt_tokens": 22,
+        "completion_tokens": 12,
+        "complete": 1
+      },
+      {
+        "status": 200,
+        "prompt_tokens": 22,
+        "completion_tokens": 12,
+        "complete": 1
+      },
+      {
+        "status": 200,
+        "prompt_tokens": 25,
+        "completion_tokens": 12,
+        "complete": 1
+      }
+    ],
+    "client_disconnect": {
+      "status": 499,
+      "complete": false,
+      "cost": null
+    }
+  },
+  "real_gpu_acceptance": {
+    "running_cancellation": true,
+    "training_allocation_observed": true,
+    "gpu_memory_after_cancel_mib": {
+      "0": 4616,
+      "1": 4,
+      "2": 4,
+      "3": 4
+    },
+    "cancelled_job_id": "job_6a75269def36",
+    "cancelled_job_gpu_seconds": 208.44937205314636,
+    "inference_after_cancel": true,
+    "rollback_to_original_verified": true,
+    "deployment_of_trained_model": true,
+    "final_active_model": "mdl_fe205e674e14",
+    "training_job": {
+      "id": "job_9d46a7fc3169",
+      "kind": "train",
+      "name": "控制台端到端验收 · Qwen3",
+      "status": "succeeded",
+      "phase": "评测完成 · 4/8 · 达到发布门槛",
+      "params": {
+        "name": "控制台端到端验收 · Qwen3",
+        "dataset_id": "ds_gsm8k",
+        "updates": 1,
+        "learning_rate": 1e-06
+      },
+      "model_id": "mdl_fe205e674e14",
+      "created": 1794464030.5295076,
+      "started": 1794464031.8486757,
+      "ended": 1794464253.8520596,
+      "error": null,
+      "gpu_seconds": 404.46332931518555,
+      "cost": null,
+      "rate": null,
+      "idem": "0799f481-23bc-4ae2-a607-95676efd60f5",
+      "request_hash": "61fd0a822aca843ec339feaec5e6a1bfbeca2a5070c97e053ee56aaf4e6089b6",
+      "training_started": null,
+      "training_ended": null
+    },
+    "evaluations": [
+      {
+        "id": "eval_1b33ed7b2ac6",
+        "model_id": "mdl_fe205e674e14",
+        "dataset_id": "ds_gsm8k",
+        "created": 1794464253.8453088,
+        "correct": 4,
+        "total": 8,
+        "threshold": 0.375,
+        "passed": 1
+      },
+      {
+        "id": "eval_imported",
+        "model_id": "mdl_smoke",
+        "dataset_id": "ds_gsm8k",
+        "created": 1794463929.497328,
+        "correct": 3,
+        "total": 8,
+        "threshold": 0.375,
+        "passed": 1
+      }
+    ]
+  },
+  "worker_restart_adoption": {
+    "verified": true,
+    "job_id": "job_9d46a7fc3169",
+    "observed_after_restart": "running, export phase; same job completed successfully"
+  },
+  "browser_acceptance": [
+    "admin login",
+    "training form submission",
+    "streaming Playground answer: 17 + 25 = 42",
+    "registered model and evaluation",
+    "deploy trained model",
+    "rollback to imported model",
+    "usage ledger and price settings dialog",
+    "desktop and narrow-window layouts; no page-width overflow",
+    "browser console: no errors observed"
+  ],
+  "limitations": [
+    "Eight math evaluation samples are not evidence of business quality.",
+    "Only one trusted operator workspace and one supported training recipe.",
+    "No off-host object storage or high availability.",
+    "Rates remain unconfigured until the operator supplies prices; no payments or charges."
+  ]
+}

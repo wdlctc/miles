@@ -1,4 +1,4 @@
-> Fork addition (2026-11-11): This fork explores an independently operated post-training and inference platform built on Miles. Start with the [platform design and MVP acceptance criteria](PLATFORM.md). Platform services are not implemented yet.
+> Fork addition (2026-11-12): This fork explores an independently operated post-training and inference platform built on Miles. Start with the [platform design](PLATFORM.md) and the [GPU training-to-serving smoke run](deployments/platform-smoke/README.md). The GPU prototype runs; platform control services are not implemented yet.
 
 <div align="center">
 

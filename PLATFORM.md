@@ -1,7 +1,7 @@
 # 自建模型后训练与推理平台
 
-状态：产品与工程设计，尚未实现平台服务或完成 GPU 端到端验证。
-更新：2026-11-11。
+状态：已完成首个 GPU 训练、导出与独立推理原型；平台控制服务尚未实现。
+更新：2026-11-12 UTC。
 上游基线：`radixark/miles@a18187f3efe49f6d1a8d2fbf1ffab2061e5ac69b`。
 
 本 fork 的方向是参考 Baseten 的产品体验，用 Miles 建设自己的后训练与推理平台。
@@ -76,7 +76,7 @@ PostgreSQL 中的任务与部署记录是平台状态的权威来源；队列负
 
 | 接入点 | 当前用途 | 平台适配工作 |
 | --- | --- | --- |
-| [scripts/run_qwen3_dense.py](scripts/run_qwen3_dense.py) | 已有 dense GRPO 配方 | 作为第一条验证路径；把平台任务映射到受支持参数 |
+| [scripts/run_qwen3_0_6b_platform.py](scripts/run_qwen3_0_6b_platform.py) | 单机 FSDP GRPO 工程验证配方 | [部署与验证记录](deployments/platform-smoke/README.md)；后续把平台任务映射到受支持参数 |
 | [train.py](train.py)、[train_async.py](train_async.py) | 训练入口 | 用后端作业运行；收集真实退出状态、日志与产物 |
 | [miles/utils/external_utils/command_utils](miles/utils/external_utils/command_utils) | 启动与集群执行辅助 | 复用已有启动逻辑，避免另外维护一套训练命令 |
 | [tools/convert_torch_dist_to_hf.py](tools/convert_torch_dist_to_hf.py)、[tools/convert_fsdp_to_hf.py](tools/convert_fsdp_to_hf.py) | 不同训练后端的导出工具 | 按后端与模型选转换路径，验证 tokenizer、配置和权重完整性 |
@@ -88,13 +88,12 @@ PostgreSQL 中的任务与部署记录是平台状态的权威来源；队列负
 
 ## 首版交付顺序与验收
 
-以下是待开发的范围，不代表当前 fork 已具备这些平台能力。
+以下区分已经完成的工程原型和后续平台范围。
 
-1. **先验证一个真实 GPU 流程。** 在授权的 GPU 环境固定代码与容器版本，跑通上游
-   Qwen3-4B 快速开始配方，保存 checkpoint，导出并在独立 SGLang 实例加载。
-   验收：保存训练日志、产物摘要、基线/训练后评测、一次真实 API 请求和资源用量。
-   环境要求见[上游快速开始](https://miles.radixark.com/docs/getting-started/quick-start)，
-   其中的示例配置不是所有模型的最低硬件要求。
+1. **真实 GPU 流程：已完成工程原型。** 首次验证缩小到 Qwen3-0.6B，在 4 张 A100 上
+   运行两轮 FSDP GRPO，保存 checkpoint，导出并在独立 SGLang 实例加载。
+   环境、产物摘要、评测、API 验证和限制统一记录在[部署说明](deployments/platform-smoke/README.md)。
+   这是小样本集成验证，不代表模型效果或生产平台验收；聊天 API 与原生推理评测的差异仍待定位。
 2. **封装任务与模型生命周期。** 实现任务创建、查询、取消、日志、持久队列、产物登记
    与评测门槛。验收：重复提交不产生重复训练；协调器重启可恢复观察；取消后确认
    后端任务和 GPU 分配已经释放；失败任务不会产生可发布版本。
@@ -135,9 +134,9 @@ Miles 的原生 Kubernetes 后端仍标为开发中，首次验证优先走 Ray�
 基础模型、数据和新增依赖各有自己的许可条件，不能从 Miles 的许可证推定它们的权限。
 此项目与 Baseten、RadixArk 无官方隶属或背书关系。
 
-## 当前完成与待输入
+## 当前完成与下一阶段
 
-- 已完成：Miles fork、上游基线记录、平台方向、架构和首版验收定义。
+- 已完成：Miles fork、平台设计、真实 GPU 训练、checkpoint 导出与完整性检查、独立推理 API。
 - 待实现：本文件描述的控制服务、平台 API、模型登记、发布、计量与控制台。
-- 待验证：真实 GPU 训练、模型导出、线上推理以及客户效果和成本。
-- 下一阶段需要：试点任务、可用 GPU 环境、计算预算，以及可用于训练和评测的数据。
+- 待验证：推理接口间的评测一致性、客户业务效果、可靠性与成本。
+- 下一阶段：在已授权 GPU 环境封装任务与模型生命周期；确定试点任务、计算预算和客户授权数据。

@@ -1,0 +1,95 @@
+{
+  "tenant": "ws_aa6cc3cf1d2f",
+  "dataset": "ds_edbee3e0c631",
+  "job": "job_c659046aa3d9",
+  "default_active_before": "dep_bfd7346f0912",
+  "cross_tenant_checks": "passed",
+  "stripe_checkout_without_credentials": 503,
+  "internal_billing_exemption": true,
+  "real_payment_attempted": false,
+  "training_status": "succeeded",
+  "model_id": "mdl_3a77ce5fdae8",
+  "model_sha256": "c1586df7fccfb9300a768e9a84e042942015364c36d48b3f4d30de4ca24a53d5",
+  "gpu_seconds": 387.4393858909607,
+  "evaluation": {
+    "correct": 2,
+    "total": 2,
+    "passed": 1
+  },
+  "deployment": {
+    "id": "dep_57d92791d17a",
+    "model_id": "mdl_3a77ce5fdae8",
+    "endpoint": "http://127.0.0.1:18082",
+    "created": 1794469433.8721058,
+    "action": "deploy",
+    "name": "Customer workspace GPU acceptance"
+  },
+  "nonstream_status": 200,
+  "nonstream_usage": {
+    "prompt_tokens": 26,
+    "total_tokens": 50,
+    "completion_tokens": 24,
+    "prompt_tokens_details": null,
+    "reasoning_tokens": 0,
+    "completion_tokens_details": null
+  },
+  "stream_done": true,
+  "key_revoked": true,
+  "default_active_after": "dep_bfd7346f0912",
+  "default_inference_status": 200,
+  "usage_rows": [
+    {
+      "status": 200,
+      "complete": 1,
+      "prompt_tokens": 26,
+      "completion_tokens": 24
+    },
+    {
+      "status": 200,
+      "complete": 1,
+      "prompt_tokens": 26,
+      "completion_tokens": 24
+    }
+  ],
+  "cleanup": {
+    "workspace_suspended": true,
+    "api_keys_revoked": true,
+    "serving_slots_released": true,
+    "internal_exemption_removed": true,
+    "artifacts_retained": true
+  },
+  "verified_date": "2026-11-11 America/Los_Angeles",
+  "implementation_revision": "296a48ab",
+  "application_tests": {
+    "passed": 29,
+    "seconds": 10.48,
+    "command": "python -m pytest --confcutdir=tests/fast/platform tests/fast/platform -q",
+    "provider": "mock HTTP; no Stripe account connected"
+  },
+  "launcher_tests": {
+    "recipe_snapshots_passed": 2,
+    "full_suite_passed": 661,
+    "full_suite_failed": 35,
+    "full_suite_errors": 4,
+    "note": "The same 35 failures and 4 errors were observed on the preceding baseline. No claim that the complete upstream launcher suite passes."
+  },
+  "browser": {
+    "login": true,
+    "billing": true,
+    "team": true,
+    "customers": true,
+    "console_errors": 0,
+    "checkout_disabled_without_credentials": true
+  },
+  "launch_status": {
+    "public_access": false,
+    "live_payments": false,
+    "stripe_sandbox_account_verified": false,
+    "merchant_account_available": false,
+    "domain_available": false,
+    "persistent_workspace_volume": false,
+    "metadata_backup_copied_off_host": true,
+    "model_weights_backed_up_off_host": false
+  },
+  "evaluation_scope": "Two simple arithmetic prompts verify the serving path only; they do not measure business quality."
+}

@@ -208,4 +208,14 @@ Application tests cover tenant/role boundaries, invitation/recovery abuse,
 concurrent balances, cancellation/restart settlement, payment signatures and
 mismatches, refunds/disputes, engine ownership, scheduling and metadata restoration.
 They do not contact Stripe. Historical console GPU evidence is in
-[acceptance.json](acceptance.json); customer-release evidence is kept separately.
+[acceptance.json](acceptance.json). [Customer acceptance](customer-acceptance.json)
+records the new tenant's real training/export/deployment, ordinary and streaming
+inference, cross-workspace denial and preservation of the default model route.
+The two simple evaluation prompts establish integration only. The internal QA
+workspace was suspended afterward, its key revoked and serving slot returned.
+
+On the acceptance host, 29 platform tests passed in 10.48 seconds and the two
+platform recipe snapshots passed. The full upstream launcher suite reported
+661 passed, 35 failed and 4 errors, matching the failures already observed on
+the preceding baseline. This release does not claim the entire upstream suite
+is green. Formatting, lint and frontend syntax checks passed.

@@ -37,10 +37,31 @@ def phase(store, job_id, text):
     store.execute("UPDATE jobs SET phase=? WHERE id=?", (text, job_id))
 
 
+def compute_env():
+    # Customer-visible training logs/diagnostic reports must never inherit
+    # payment, cloud or control-plane credentials from the supervisor environment.
+    allowed = {
+        "PATH",
+        "HOME",
+        "USER",
+        "LOGNAME",
+        "LANG",
+        "LC_ALL",
+        "TMPDIR",
+        "HOSTNAME",
+        "LD_LIBRARY_PATH",
+        "CUDA_HOME",
+        "CUDA_PATH",
+        "HF_HOME",
+        "VIRTUAL_ENV",
+    }
+    return {key: value for key, value in os.environ.items() if key in allowed}
+
+
 def train_env():
     # GPU 0 belongs to serving. Ray and all training descendants see only GPUs 1–3.
     return {
-        **os.environ,
+        **compute_env(),
         "CUDA_VISIBLE_DEVICES": "1,2,3",
         "OMP_NUM_THREADS": "4",
         "PYTHONPATH": str(REPO),
@@ -351,5 +372,5 @@ def serve_slot(store, slot):
     os.execvpe(
         command[0],
         command,
-        {**os.environ, "CUDA_VISIBLE_DEVICES": "0", "OMP_NUM_THREADS": "4", "NCCL_NVLS_ENABLE": "0"},
+        {**compute_env(), "CUDA_VISIBLE_DEVICES": "0", "OMP_NUM_THREADS": "4", "NCCL_NVLS_ENABLE": "0"},
     )

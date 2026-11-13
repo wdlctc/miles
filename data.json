@@ -1,0 +1,219 @@
+{
+  "snapshot_date": "2026-11-12",
+  "record_kind": "historical_acceptance_snapshot",
+  "base_model": "Qwen3-0.6B",
+  "recipe": "FSDP GRPO",
+  "training_gpus": 3,
+  "job": {
+    "id": "job_a4c22d03f1bd",
+    "name": "实时训练 · Qwen3 · 2026-11-12",
+    "status": "succeeded",
+    "phase": "评测完成 · 4/8 · 达到发布门槛",
+    "params": {
+      "name": "实时训练 · Qwen3 · 2026-11-12",
+      "dataset_id": "ds_gsm8k",
+      "updates": 10,
+      "learning_rate": 1e-06
+    },
+    "created": 1794509637.0745378,
+    "started": 1794509638.414557,
+    "ended": 1794510072.358024,
+    "gpu_seconds": 1045.9388036727905,
+    "model_id": "mdl_eb9c1fc05fab",
+    "error": null
+  },
+  "model": {
+    "id": "mdl_eb9c1fc05fab",
+    "name": "实时训练 · Qwen3 · 2026-11-12",
+    "job_id": "job_a4c22d03f1bd",
+    "dataset_id": "ds_gsm8k",
+    "created": 1794510013.6767273,
+    "sha256": "7c3acbf0804aa020ebcb4276aabd4a8a7f951cbfc8cd6eaf4c7e84f165d5f0e9",
+    "validated": 1,
+    "metadata": {
+      "validation": {
+        "sha256": "7c3acbf0804aa020ebcb4276aabd4a8a7f951cbfc8cd6eaf4c7e84f165d5f0e9",
+        "unique_tensors": 310,
+        "changed_tensors": 253,
+        "all_finite": true
+      },
+      "updates": 10,
+      "learning_rate": 1e-06
+    }
+  },
+  "telemetry": {
+    "job_id": "job_a4c22d03f1bd",
+    "total_updates": 10,
+    "completed_updates": 10,
+    "samples": [
+      {
+        "step": 1,
+        "completed": true,
+        "reward": 0.4375,
+        "response_tokens": 227.125,
+        "truncated_fraction": 0.0625,
+        "loss": 0.0,
+        "policy_loss": 0.0,
+        "grad_norm": 4.035878658294678,
+        "learning_rate": 1e-06
+      },
+      {
+        "step": 2,
+        "completed": true,
+        "reward": 0.5625,
+        "response_tokens": 155.625,
+        "truncated_fraction": 0.0,
+        "loss": 3.725290298461914e-09,
+        "policy_loss": 3.725290298461914e-09,
+        "grad_norm": 3.0622718334198,
+        "learning_rate": 1e-06
+      },
+      {
+        "step": 3,
+        "completed": true,
+        "reward": 0.125,
+        "response_tokens": 159.5625,
+        "truncated_fraction": 0.0,
+        "loss": -9.313225746154785e-09,
+        "policy_loss": -9.313225746154785e-09,
+        "grad_norm": 3.331113815307617,
+        "learning_rate": 1e-06
+      },
+      {
+        "step": 4,
+        "completed": true,
+        "reward": 0.625,
+        "response_tokens": 223.6875,
+        "truncated_fraction": 0.0,
+        "loss": 1.4901161193847656e-08,
+        "policy_loss": 1.4901161193847656e-08,
+        "grad_norm": 3.5930609703063965,
+        "learning_rate": 1e-06
+      },
+      {
+        "step": 5,
+        "completed": true,
+        "reward": 0.9375,
+        "response_tokens": 180.75,
+        "truncated_fraction": 0.0,
+        "loss": 1.1175870895385742e-08,
+        "policy_loss": 1.1175870895385742e-08,
+        "grad_norm": 2.9934659004211426,
+        "learning_rate": 1e-06
+      },
+      {
+        "step": 6,
+        "completed": true,
+        "reward": 0.5,
+        "response_tokens": 212.625,
+        "truncated_fraction": 0.0,
+        "loss": 0.0,
+        "policy_loss": 0.0,
+        "grad_norm": 0.0,
+        "learning_rate": 1e-06
+      },
+      {
+        "step": 7,
+        "completed": true,
+        "reward": 0.6875,
+        "response_tokens": 181.625,
+        "truncated_fraction": 0.0,
+        "loss": -7.450580596923828e-09,
+        "policy_loss": -7.450580596923828e-09,
+        "grad_norm": 2.224565267562866,
+        "learning_rate": 1e-06
+      },
+      {
+        "step": 8,
+        "completed": true,
+        "reward": 0.375,
+        "response_tokens": 180.6875,
+        "truncated_fraction": 0.0,
+        "loss": -1.4901161193847656e-08,
+        "policy_loss": -1.4901161193847656e-08,
+        "grad_norm": 2.1761744022369385,
+        "learning_rate": 1e-06
+      },
+      {
+        "step": 9,
+        "completed": true,
+        "reward": 0.5625,
+        "response_tokens": 197.5,
+        "truncated_fraction": 0.125,
+        "loss": 2.2351741790771484e-08,
+        "policy_loss": 2.2351741790771484e-08,
+        "grad_norm": 3.837625741958618,
+        "learning_rate": 1e-06
+      },
+      {
+        "step": 10,
+        "completed": true,
+        "reward": 0.75,
+        "response_tokens": 149.8125,
+        "truncated_fraction": 0.0,
+        "loss": -7.450580596923828e-09,
+        "policy_loss": -7.450580596923828e-09,
+        "grad_norm": 3.380188465118408,
+        "learning_rate": 1e-06
+      }
+    ],
+    "elapsed_seconds": 433.9434669017792,
+    "log_updated_at": 1794510072.3495936,
+    "observed_at": 1794510083.0200477,
+    "scan_truncated": false,
+    "invalid_metrics": false,
+    "evaluation": {
+      "correct": 4,
+      "total": 8,
+      "passed": 1
+    }
+  },
+  "deployment": {
+    "id": "dep_21ab11164a93",
+    "model_id": "mdl_eb9c1fc05fab",
+    "created": 1794510303.017884,
+    "action": "deploy",
+    "name": "实时训练 · Qwen3 · 2026-11-12"
+  },
+  "api_acceptance": {
+    "verified_at": 1794510449.812206,
+    "alias": "miles-default",
+    "prompt": "17 + 25 = ?",
+    "nonstream": {
+      "status": 200,
+      "answer": "17 + 25 = 42",
+      "usage": {
+        "prompt_tokens": 26,
+        "total_tokens": 37,
+        "completion_tokens": 11,
+        "prompt_tokens_details": null,
+        "reasoning_tokens": 0,
+        "completion_tokens_details": null
+      },
+      "elapsed_seconds": 0.535,
+      "metering_complete": true
+    },
+    "stream": {
+      "status": 200,
+      "answer": "17 + 25 = 42",
+      "usage": {
+        "prompt_tokens": 26,
+        "total_tokens": 37,
+        "completion_tokens": 11,
+        "prompt_tokens_details": null,
+        "reasoning_tokens": 0,
+        "completion_tokens_details": null
+      },
+      "elapsed_seconds": 0.392,
+      "done": true
+    },
+    "unauthenticated_status": 401,
+    "revoked_key_status": 401,
+    "quality_example": {
+      "prompt": "一个盒子有 12 支铅笔，买了 3 盒，用掉 5 支，还剩多少支？请给出算式和答案。",
+      "expected_answer": 31,
+      "observed_answer": 22,
+      "answer_correct": false
+    }
+  }
+}

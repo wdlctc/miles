@@ -1,4 +1,6 @@
-> Fork addition (2026-11-12): This fork builds an independently operated post-training and inference platform on Miles. The [single-workspace console](miles_platform/README.md) supports real training, evaluation, deployment, API keys and metering. See the [platform direction](PLATFORM.md) and [first GPU experiment](deployments/platform-smoke/README.md) for scope and evidence.
+> **[View the public platform showcase](https://wdlctc.github.io/miles/)** · **[Platform source](https://github.com/wdlctc/miles/tree/codex/customer-platform/miles_platform)** · **[Deployment guide](miles_platform/README.md)**
+>
+> Fork addition (2026-11-13): This independently operated platform combines Miles post-training with a workspace console, evaluation, deployment, API keys and metering. The public showcase presents historical training results and API acceptance records; the GPU-backed application is deployed separately. See the [platform direction](PLATFORM.md) and [first GPU experiment](deployments/platform-smoke/README.md) for scope and evidence.
 
 <div align="center">
 

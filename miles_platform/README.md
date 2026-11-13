@@ -1,5 +1,10 @@
 # Miles Platform customer beta
 
+[Open the public showcase](https://wdlctc.github.io/miles/) to explore the UI
+and completed training records without signing in. It is a historical,
+read-only site, separate from the GPU-backed application described below.
+Its source and publishing instructions are in [showcase/](showcase/README.md).
+
 This fork combines Miles post-training with a self-hosted console and SGLang
 inference gateway. Baseten is a product reference, not a connected hosting
 service. The platform is independently operated.

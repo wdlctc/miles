@@ -4,6 +4,8 @@
 
 [实验代码](../../../tools/benchmark_blackwell_posttraining.py)、[完整指标与逐步训练记录](results.json)、[精确软件版本](requirements.lock.txt)。所有表格从 `results.json` 中的原始记录计算。失败的实验也保留在记录中。
 
+后续的 [性能原因分析与 CUDA Graph 对照](DIAGNOSIS.md) 进一步拆分了量化、GEMM 和执行开销；原始三轮基准数据保持不变。
+
 ## 环境与对照方法
 
 - 服务器有 4 × NVIDIA B200，每张 183359 MiB；训练和算子测量串行使用 GPU 0，模型加载验证使用 GPU 1。

@@ -97,7 +97,14 @@ def create_app(
         workspace.execute("UPDATE usage SET status=599,ended=? WHERE status=102 AND ended IS NULL", (now(),))
         billing.reconcile(workspace)
     config = payment_config or PaymentConfig()
-    app = FastAPI(title="Miles Platform", version="0.2.0", docs_url="/api/docs", redoc_url=None)
+    # Keep the schema under /api/ so it requires a signed-in session like the docs page.
+    app = FastAPI(
+        title="Miles Platform",
+        version="0.2.0",
+        docs_url="/api/docs",
+        openapi_url="/api/openapi.json",
+        redoc_url=None,
+    )
     app.state.store = store
     app.state.registry = registry
     app.add_middleware(WorkspaceMiddleware, registry=registry)

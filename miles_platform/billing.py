@@ -8,6 +8,7 @@ from miles_platform.store import now
 
 MICRO = 1_000_000
 TRAIN_SECONDS_LIMIT = 3 * 1320
+STALE_SECONDS = 300
 
 
 def micros(dollars):
@@ -95,6 +96,11 @@ def reconcile(store):
     """Recover settlement after runner/API failure without charging twice."""
     prepare(store)
     with store.connect(write=True) as db:
+        # An inference record that outlived every gateway timeout was abandoned;
+        # close it as unmetered so its hold and concurrency slot are returned.
+        db.execute(
+            "UPDATE usage SET status=599,ended=? WHERE ended IS NULL AND created<?", (now(), now() - STALE_SECONDS)
+        )
         for hold in db.execute("SELECT * FROM holds WHERE settled IS NULL").fetchall():
             table = "jobs" if hold["kind"] == "training" else "usage"
             row = db.execute(f"SELECT * FROM {table} WHERE id=?", (hold["id"],)).fetchone()

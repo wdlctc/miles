@@ -75,7 +75,11 @@ ssh -N -L 127.0.0.1:8081:127.0.0.1:18090 -p SSH_PORT SSH_USER@SSH_HOST
 
 Open `http://localhost:8081/`. Retain private SSH access until public launch
 requirements are met. Never expose raw Ray, SGLang or root access to customers.
-The API schema is available after login at `/api/docs`. Standalone dependencies
+The API schema is available after login at `/api/docs`. Sign-in is limited to
+15 failed attempts per account and per client address in 15 minutes. Behind a
+reverse proxy, run it on the same host and have it set `X-Forwarded-For`, which
+Uvicorn trusts from 127.0.0.1 only; otherwise every user shares one address
+bucket. Standalone dependencies
 are pinned in `requirements.txt`; the GPU runner needs the existing smoke-run
 environment. The frontend has no build step.
 
@@ -115,7 +119,9 @@ Current workspace quotas: 3 active jobs, 10 registered trained models,
 2,048-token context and 512 output tokens. Retention/deletion and capacity
 increases are operator-managed. The runner alternates between queued tenants.
 Suspension blocks new requests and cancels queued/running jobs. Accepted
-inference calls may finish. Keys are workspace credentials shared by the team;
+inference calls may finish; the worker then stops the workspace's serving slots,
+clears its active route and returns the slots to the pool, so a reactivated
+workspace must deploy again. Keys are workspace credentials shared by the team;
 removing a member does not automatically revoke those shared keys.
 
 After verifying a customer's identity, an operator can issue a recovery link:
@@ -170,6 +176,9 @@ Training reserves at most 3 GPUs × 22 minutes at the accepted rate, including
 cleanup allowance. Inference reserves the engine context/output upper bound.
 Settlement uses observed usage, rounds up to microUSD and never exceeds the
 reservation; unused funds are released. Unknown usage is not invented or billed.
+A streaming caller that disconnects early is still charged the measured usage:
+the gateway reads the started generation to its final usage record. A request
+left open for five minutes is closed as unmetered and its hold is released.
 Restart reconciliation settles terminal records once. Evaluation and resident
 hosting are included within beta quotas. This is prepaid compute, not recurring
 subscriptions, automatic recharge or unlimited hosting.

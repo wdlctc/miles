@@ -21,7 +21,7 @@ function chart(field, featured = false) {
   const high = Math.max(...samples.map((sample) => sample[field]));
   const points = samples.map((sample, index) => [40 + index / (samples.length - 1) * 540,
     high === low ? 105 : 180 - (sample[field] - low) / (high - low) * 150]);
-  return `<section class="training-chart ${featured ? "featured-chart" : ""}"><h3>${metricNames[field]}</h3><svg viewBox="0 0 620 215" role="img" aria-label="${metricNames[field]}：第 1 至 ${samples.length} 步的实际测量值"><path class="chart-axis" d="M40 15V180H590"/><polyline points="${points.map((point) => point.join(",")).join(" ")}"/>${points.map((point, index) => `<circle cx="${point[0]}" cy="${point[1]}" r="4"><title>第 ${samples[index].step} 步：${scalar(samples[index][field])}</title></circle>`).join("")}<text x="40" y="205" font-size="10" fill="#666963">第 1 步</text><text x="540" y="205" font-size="10" fill="#666963">第 ${samples.length} 步</text></svg><small>范围 ${scalar(low)} 至 ${scalar(high)} · 每个点对应一次训练更新</small></section>`;
+  return `<section class="training-chart ${featured ? "featured-chart" : ""}"><h3>${metricNames[field]}</h3><svg viewBox="0 0 620 215" role="img" aria-label="${metricNames[field]}：第 1 至 ${samples.length} 步的实际测量值"><path class="chart-axis" d="M40 15V180H590"/><polyline points="${points.map((point) => point.join(",")).join(" ")}"/>${points.map((point, index) => `<circle cx="${point[0]}" cy="${point[1]}" r="4"><title>第 ${samples[index].step} 步：${scalar(samples[index][field])}</title></circle>`).join("")}<text x="40" y="205" font-size="10" fill="#666963">第 1 步</text><text x="540" y="205" font-size="10" fill="#666963">第 ${samples.length} 步</text></svg><small>范围 ${scalar(low)} 至 ${scalar(high)} · 每个点对应一次训练更新${field === "loss" ? " · 每批只做一次策略更新、组内优势均值为 0，损失接近 0 属预期；此曲线是数值噪声，不反映训练进展" : ""}</small></section>`;
 }
 
 function overview() {
@@ -32,7 +32,7 @@ function overview() {
     <div class="metrics">${metric("完成训练更新", `${telemetry.completed_updates} / ${telemetry.total_updates}`, "Qwen3-0.6B · FSDP GRPO")}${metric("任务用时", `${minutes}m ${seconds}s`, "包含训练、导出与独立评测")}${metric("独立评测", `${telemetry.evaluation.correct} / ${telemetry.evaluation.total}`, "小样本工程验证 · 不代表业务质量")}${metric("实际更新张量", model.metadata.validation.changed_tensors, `共 ${model.metadata.validation.unique_tensors} 个唯一张量`)}</div>
     <div class="grid-main"><section class="card"><div class="card-head"><h2>一轮训练的完整路径</h2><span class="pill">已完成</span></div><ol class="steps"><li><span class="step-number">01</span><div><h3>训练</h3><p>${record.training_gpus} 张 A100 · ${telemetry.total_updates} 次优化器更新</p></div><a class="text-link" href="#training">看曲线 ↗</a></li><li><span class="step-number">02</span><div><h3>评测与模型导出</h3><p>独立评分、权重变更检查与 SHA-256 校验</p></div><a class="text-link" href="#model">看模型 ↗</a></li><li><span class="step-number">03</span><div><h3>部署与调用</h3><p>普通响应、SSE 流式响应和用量计量已验收</p></div><a class="text-link" href="#playground">看记录 ↗</a></li></ol></section>
     <section class="card hero-card"><div class="card-head"><h2>把工作流留在自己的平台</h2><span class="pill">开源代码</span></div><div class="card-body"><h3>训练、评测、上线，统一管理。</h3><p>工作区与角色、模型版本、推理 API、用量记录，以及 Stripe 结账集成。</p><div class="endpoint">Miles + SGLang<br>Qwen3-0.6B / FSDP GRPO</div><small>当前为平台 beta。真实支付和公开客户服务尚未启用。</small>${link("查看部署指南", guide)}</div></section></div>
-    <div class="training-charts">${chart("reward")}${chart("loss")}</div>${snapshotNotice()}`;
+    <div class="training-charts">${chart("reward")}${chart("grad_norm")}</div>${snapshotNotice()}`;
 }
 
 function training() {

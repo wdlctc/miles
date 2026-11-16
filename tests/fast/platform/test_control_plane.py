@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import httpx
@@ -5,7 +6,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from miles_platform.api import create_app
-from miles_platform.gateway import record
+from miles_platform import billing
+from miles_platform.gateway import PUMPS, Chat, proxy, record
 from miles_platform.runtime import deploy
 from miles_platform.store import Store, digest, now
 from miles_platform.worker import tick
@@ -219,3 +221,79 @@ def test_training_telemetry_updates_without_mutating_job_and_requires_auth(syste
     assert client.get("/api/jobs/missing/telemetry").status_code == 404
     client.post("/api/logout")
     assert client.get(route).status_code == 401
+
+
+def test_worker_never_overwrites_a_status_the_runner_recorded(system, monkeypatch):
+    _, store, _ = system
+    job = store.enqueue("deploy", "finish", {}, "mdl")
+    store.execute("UPDATE jobs SET status='running',started=? WHERE id=?", (now(), job["id"]))
+
+    def finish_then_exit(action, service, **kw):
+        store.execute("UPDATE jobs SET status='succeeded',ended=? WHERE id=?", (now(), job["id"]))
+        return "EXITED"
+
+    monkeypatch.setattr("miles_platform.worker.supervise", finish_then_exit)
+    tick(store)
+    row = store.one("SELECT status,error FROM jobs WHERE id=?", (job["id"],))
+    assert row["status"] == "succeeded" and row["error"] is None
+
+
+def test_stream_disconnect_is_charged_measured_usage(system):
+    client, store, _ = system
+    client.put("/api/rates", json={"gpu_hour": 1, "input_million": 2, "output_million": 4})
+
+    async def scenario():
+        release = asyncio.Event()
+
+        class Generation(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield b'data: {"choices": [{"delta": {"content": "4"}}]}\n\n'
+                await release.wait()
+                yield b'data: {"choices": [], "usage": {"prompt_tokens": 10, "completion_tokens": 2}}\n\n'
+                yield b"data: [DONE]\n\n"
+
+        def factory(**kwargs):
+            transport = httpx.MockTransport(lambda request: httpx.Response(200, stream=Generation()))
+            return httpx.AsyncClient(transport=transport, **kwargs)
+
+        chat = Chat(messages=[{"role": "user", "content": "x"}], stream=True)
+        response = await proxy(store, chat, {"id": "console", "rpm": 30}, factory)
+        body = response.body_iterator
+        assert b"content" in await anext(body)
+        await body.aclose()
+        assert store.one("SELECT ended FROM usage")["ended"] is None
+        release.set()
+        await asyncio.gather(*PUMPS)
+
+    asyncio.run(scenario())
+    row = store.one("SELECT * FROM usage")
+    assert row["status"] == 499 and row["complete"] and row["completion_tokens"] == 2
+    assert row["cost"] == pytest.approx(0.000028)
+
+
+def test_abandoned_request_cannot_hold_concurrency_forever(system):
+    client, store, _ = system
+    for index in range(2):
+        store.execute(
+            "INSERT INTO usage(id,key_id,deployment_id,created,status) VALUES (?,'console','dep',?,102)",
+            (f"req_lost{index}", now() - billing.STALE_SECONDS - 1),
+        )
+    body = {"messages": [{"role": "user", "content": "x"}]}
+    assert client.post("/api/playground", json=body).status_code == 200
+    billing.reconcile(store)
+    assert {r["status"] for r in store.rows("SELECT status FROM usage WHERE id LIKE 'req_lost%'")} == {599}
+
+
+def test_only_failed_sign_ins_count_and_schema_requires_session(system):
+    client, store, _ = system
+    assert client.get("/api/openapi.json").status_code == 200
+    password = (store.root / "admin-password").read_text()
+    registry = client.app.state.registry
+    for _ in range(2):
+        assert client.post("/api/login", json={"password": password}).status_code == 200
+    assert registry.data.one("SELECT COUNT(*) n FROM attempts")["n"] == 0
+    client.post("/api/logout")
+    assert client.get("/api/openapi.json").status_code == 401
+    assert client.get("/openapi.json").status_code == 404
+    assert client.post("/api/login", json={"password": "wrong"}).status_code == 401
+    assert registry.data.one("SELECT COUNT(*) n FROM attempts")["n"] == 2

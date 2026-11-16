@@ -494,3 +494,27 @@ def test_compute_children_do_not_inherit_payment_or_cloud_secrets(monkeypatch):
     env = train_env()
     assert "STRIPE_SECRET_KEY" not in env and "AWS_SECRET_ACCESS_KEY" not in env and "DATABASE_URL" not in env
     assert env["HF_HOME"] == "/cache/public-models" and env["CUDA_VISIBLE_DEVICES"] == "1,2,3"
+
+
+def test_suspension_returns_serving_slots_and_clears_route(platform, monkeypatch):
+    from miles_platform.worker import tick_workspaces
+
+    _, store, _ = customer(platform)
+    registry = platform[0].state.registry
+    registry.data.execute("INSERT INTO engines VALUES ('a',?,'mdl',18081)", (store.tenant_id,))
+    registry.data.execute("INSERT INTO engines VALUES ('b','default','private_model',18082)")
+    store.execute("INSERT INTO slots VALUES ('a','mdl',18081)")
+    store.set("active_deployment", "dep")
+    commands = []
+    monkeypatch.setattr("miles_platform.worker.supervise", lambda *a, **kw: commands.append(a) or "STOPPED")
+    tick_workspaces(registry)
+    assert commands == [] and len(registry.data.rows("SELECT * FROM engines")) == 2
+    platform[1].patch("/api/operator/tenants/" + store.tenant_id, json={"status": "suspended"})
+    store.execute("INSERT INTO usage(id,key_id,created,status) VALUES ('req_open','console',?,102)", (now(),))
+    tick_workspaces(registry)
+    assert commands == []
+    store.execute("UPDATE usage SET ended=?", (now(),))
+    tick_workspaces(registry)
+    assert commands == [("stop", "slot-a")]
+    assert [r["tenant"] for r in registry.data.rows("SELECT tenant FROM engines")] == ["default"]
+    assert store.setting("active_deployment") is None and not store.rows("SELECT * FROM slots")

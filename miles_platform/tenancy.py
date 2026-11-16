@@ -36,6 +36,7 @@ class WorkspaceStore:
 class Registry:
     def __init__(self, default):
         self.default = default
+        self.opened = {}
         self.data = Store(default.root / "identity")
         with self.data.connect() as db:
             db.executescript(
@@ -74,12 +75,18 @@ class Registry:
         row = self.data.one("SELECT * FROM tenants WHERE id=?", (tenant,))
         if not row:
             raise HTTPException(404, "Workspace not found")
-        store = self.default if tenant == "default" else Store(self.default.root / "workspaces" / tenant / "control")
-        store.registry, store.tenant_id = self, tenant
+        store = self.opened.get(tenant)
+        if store is None:
+            # Opening a Store runs its schema setup; do that once, not per request.
+            store = (
+                self.default if tenant == "default" else Store(self.default.root / "workspaces" / tenant / "control")
+            )
+            store.registry, store.tenant_id = self, tenant
+            store.base_models = self.default.root.parent / "models"
+            if store.setting("quality_threshold") is None:
+                store.set("quality_threshold", 0.375)
+            self.opened[tenant] = store
         store.exempt = bool(row["exempt"])
-        store.base_models = self.default.root.parent / "models"
-        if store.setting("quality_threshold") is None:
-            store.set("quality_threshold", 0.375)
         return store
 
     def stores(self):
@@ -99,6 +106,12 @@ class Registry:
             if count >= 15:
                 raise HTTPException(429, "Too many attempts; retry in 15 minutes")
             db.execute("INSERT INTO attempts VALUES (?,?)", (bucket, now()))
+
+    def forgive(self, bucket):
+        """Return the attempt a successful sign-in consumed; only failures count."""
+        self.data.execute(
+            "DELETE FROM attempts WHERE rowid=(SELECT MAX(rowid) FROM attempts WHERE bucket=?)", (bucket,)
+        )
 
     def principal(self, token):
         row = self.data.one(

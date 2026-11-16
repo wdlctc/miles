@@ -61,11 +61,13 @@ def tick(store):
                 seconds = max(0, now() - active["training_started"]) * 3
                 cost = seconds / 3600 * active["rate"] if active["rate"] is not None else None
                 store.execute(
-                    "UPDATE jobs SET gpu_seconds=?,cost=?,training_ended=? WHERE id=?",
+                    "UPDATE jobs SET gpu_seconds=?,cost=?,training_ended=? WHERE id=? AND status='running' AND training_ended IS NULL",
                     (seconds, cost, now(), active["id"]),
                 )
+            # The runner may have finished between the read above and its exit;
+            # never overwrite a terminal status it already recorded.
             store.execute(
-                "UPDATE jobs SET status='failed',error='Runner exited unexpectedly; inspect retained logs',ended=? WHERE id=?",
+                "UPDATE jobs SET status='failed',error='Runner exited unexpectedly; inspect retained logs',ended=? WHERE id=? AND status='running'",
                 (now(), active["id"]),
             )
         return
@@ -107,18 +109,34 @@ def work(store):
             time.sleep(2)
 
 
+def release_engines(registry, workspace):
+    """Return a suspended workspace's serving slots once its accepted requests finish."""
+    owned = registry.data.rows("SELECT id FROM engines WHERE tenant=?", (workspace.tenant_id,))
+    if not owned or workspace.one("SELECT 1 FROM usage WHERE ended IS NULL LIMIT 1"):
+        return
+    # Clear the route before giving up ownership: the slot's next owner must
+    # never be reachable through this workspace's model alias.
+    workspace.execute("DELETE FROM settings WHERE key='active_deployment'")
+    for row in owned:
+        supervise("stop", "slot-" + row["id"], check=False)
+    workspace.execute("DELETE FROM slots")
+    registry.data.execute("DELETE FROM engines WHERE tenant=?", (workspace.tenant_id,))
+    workspace.audit("engines_released", ",".join(row["id"] for row in owned))
+
+
 def tick_workspaces(registry):
     stores = registry.stores()
     running, queued = [], []
     for workspace in stores:
         workspace.set("worker_heartbeat", now())
         billing.reconcile(workspace)
+        state = registry.data.one("SELECT status FROM tenants WHERE id=?", (workspace.tenant_id,))
         if workspace.one("SELECT id FROM jobs WHERE status IN ('running','cancel_requested') LIMIT 1"):
             running.append(workspace)
+        elif state["status"] != "active":
+            release_engines(registry, workspace)
         elif workspace.one("SELECT id FROM jobs WHERE status='queued' LIMIT 1"):
-            state = registry.data.one("SELECT status FROM tenants WHERE id=?", (workspace.tenant_id,))
-            if state["status"] == "active":
-                queued.append(workspace)
+            queued.append(workspace)
     if len(running) > 1:
         raise RuntimeError("Multiple active runners detected; refusing to start another job")
     if running:

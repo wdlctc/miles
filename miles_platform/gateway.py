@@ -12,6 +12,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from miles_platform.store import now, uid
 from miles_platform import billing
 
+# A stream is read to completion within this bound, so billing.reconcile never
+# closes a request that is still being metered.
+STREAM_SECONDS = billing.STALE_SECONDS - 20
+PUMPS = set()
+
 
 class Chat(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -51,7 +56,10 @@ def reserve(store, key, deployment):
         ).fetchone()[0]
         if count >= key["rpm"]:
             raise HTTPException(429, "Request limit reached; retry in one minute", headers={"Retry-After": "60"})
-        concurrent = db.execute("SELECT COUNT(*) FROM usage WHERE ended IS NULL").fetchone()[0]
+        # Bounded like reconcile: a record that was never closed cannot hold a slot forever.
+        concurrent = db.execute(
+            "SELECT COUNT(*) FROM usage WHERE ended IS NULL AND created>?", (now() - billing.STALE_SECONDS,)
+        ).fetchone()[0]
         if concurrent >= 2:
             raise HTTPException(429, "Workspace concurrency limit reached (2)")
         billing.reserve(db, store, request_id, "inference", billing.inference_quote(store, rates))
@@ -123,31 +131,50 @@ async def proxy(store, chat, key, client_factory=httpx.AsyncClient):
             await upstream.aclose()
             await client.aclose()
 
-    async def stream():
+    # The upstream reader owns metering and outlives the client connection. A
+    # caller that disconnects before the final usage chunk is still charged the
+    # measured usage of the generation it started, never an invented amount.
+    queue, gone = asyncio.Queue(), False
+
+    async def pump():
         usage, status, done = None, 200, False
         try:
-            async for line in upstream.aiter_lines():
-                if line.startswith("data: ") and line != "data: [DONE]":
-                    item = json.loads(line[6:])
-                    item["model"] = "miles-default"
-                    if item.get("usage"):
-                        usage = item["usage"]
-                    line = "data: " + json.dumps(item)
-                if line == "data: [DONE]":
-                    done = True
-                yield (line + "\n").encode()
+            async with asyncio.timeout(STREAM_SECONDS):
+                async for line in upstream.aiter_lines():
+                    if line.startswith("data: ") and line != "data: [DONE]":
+                        item = json.loads(line[6:])
+                        item["model"] = "miles-default"
+                        if item.get("usage"):
+                            usage = item["usage"]
+                        line = "data: " + json.dumps(item)
+                    if line == "data: [DONE]":
+                        done = True
+                    queue.put_nowait((line + "\n").encode())
             if not done:
                 status = 502
         except asyncio.CancelledError:
             status = 499
             raise
-        except (ValueError, httpx.HTTPError):
+        except (ValueError, httpx.HTTPError, TimeoutError):
             status = 502
-            yield b'data: {"error":{"message":"Inference stream interrupted"}}\n\n'
+            queue.put_nowait(b'data: {"error":{"message":"Inference stream interrupted"}}\n\n')
         finally:
-            record(store, request_id, status, usage)
+            record(store, request_id, 499 if gone and status == 200 else status, usage)
+            queue.put_nowait(None)
             await upstream.aclose()
             await client.aclose()
+
+    task = asyncio.create_task(pump())
+    PUMPS.add(task)
+    task.add_done_callback(PUMPS.discard)
+
+    async def stream():
+        nonlocal gone
+        try:
+            while (chunk := await queue.get()) is not None:
+                yield chunk
+        finally:
+            gone = not task.done()
 
     return StreamingResponse(
         stream(), media_type="text/event-stream", headers={"X-Request-ID": request_id, "Cache-Control": "no-cache"}

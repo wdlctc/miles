@@ -73,8 +73,9 @@ def install_accounts(app, registry, secure):
     @router.post("/api/login")
     def login(body: SignIn, request: Request, response: Response):
         email = body.email.strip().lower()
-        registry.limit_login("login:" + digest(email))
-        registry.limit_login("ip:" + (request.client.host if request.client else "unknown"))
+        buckets = ("login:" + digest(email), "ip:" + (request.client.host if request.client else "unknown"))
+        for bucket in buckets:
+            registry.limit_login(bucket)
         user = registry.data.one("SELECT * FROM users WHERE email=?", (email,))
         encoded = (
             user["password"]
@@ -83,6 +84,8 @@ def install_accounts(app, registry, secure):
         )
         if not password_matches(body.password, encoded) or not user:
             raise HTTPException(401, "Incorrect email or password")
+        for bucket in buckets:
+            registry.forgive(bucket)
         member = registry.data.one(
             "SELECT m.tenant FROM members m JOIN tenants t ON t.id=m.tenant WHERE user=? AND t.status='active' ORDER BY t.created LIMIT 1",
             (user["id"],),

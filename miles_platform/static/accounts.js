@@ -16,7 +16,7 @@ function allowedAction(action) {
   if (!account) return false;
   if (action === "rates") return !!account.user.operator;
   if (
-    ["new-job", "cancel", "evaluate", "new-dataset", "playground"].includes(
+    ["new-job", "cancel", "evaluate", "quantize", "new-dataset", "playground"].includes(
       action,
     )
   )

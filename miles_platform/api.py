@@ -6,7 +6,7 @@ import json
 import secrets
 import subprocess
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import urlparse
 
 import httpx
@@ -41,6 +41,12 @@ class Train(Input):
     dataset_id: str
     updates: int = Field(default=2, ge=1, le=10)
     learning_rate: float = Field(default=1e-6, ge=1e-7, le=1e-5)
+    mode: Literal["sync", "async"] = "sync"
+
+
+class Quantize(Input):
+    format: Literal["fp8", "nvfp4"]
+    method: Literal["max", "four_over_six", "local_hessian"] = "max"
 
 
 class Key(Input):
@@ -263,6 +269,20 @@ def create_app(
     def evaluate(model_id: str, idempotency_key: str | None = Header(default=None, max_length=128)):
         item = model(model_id)
         return enqueue("evaluate", "评测 · " + item["name"], {}, model_id, idempotency_key)
+
+    @app.post("/api/models/{model_id}/quantize", dependencies=[Depends(admin)], status_code=202)
+    def quantize(
+        model_id: str, body: Quantize, idempotency_key: str | None = Header(default=None, max_length=128)
+    ):
+        item = model(model_id)
+        if not item["validated"]:
+            raise HTTPException(409, "Artifact validation has not passed")
+        if "quantization" in json.loads(item["metadata"]):
+            raise HTTPException(409, "Quantize the original model version, not an already quantized one")
+        if body.format == "fp8" and body.method != "max":
+            raise HTTPException(422, "FP8 uses round-to-nearest; scale searches apply to NVFP4")
+        name = f"量化 {body.format.upper()} · {item['name']}"[:80]
+        return enqueue("quantize", name, body.model_dump(), model_id, idempotency_key)
 
     @app.post("/api/models/{model_id}/deploy", dependencies=[Depends(admin)], status_code=202)
     def deploy(model_id: str, idempotency_key: str | None = Header(default=None, max_length=128)):

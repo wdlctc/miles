@@ -15,15 +15,24 @@ EVENT = re.compile(
     r"^\(FSDPTrainRayActor pid=\d+\) \[[^\]\n]+ actor_cell\d+_rank00000\] "
     r"log_utils\.py:\d+ - (step|rollout) (\d+): (\{.*\})\s*$"
 )
+# Policy-version metrics come from the rollout executor, not the trainer.
+PERF = re.compile(r"^\(RolloutExecutor pid=\d+\) \[[^\]\n]+ rollout_executor\] metrics\.py:\d+ - (perf) (\d+): (\{.*\})\s*$")
 SCALAR = re.compile(r"['\"]([^'\"]+)['\"]:\s*(-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|nan|inf|-inf)(?=\s*[,}])")
 FIELDS = {
     "train/loss": "loss",
     "train/pg_loss": "policy_loss",
     "train/grad_norm": "grad_norm",
     "train/lr-pg_0": "learning_rate",
+    "train/train_rollout_kl": "sampler_kl",
     "rollout/raw_reward_filtered": "reward",
     "rollout/response_lengths": "response_tokens",
     "rollout/truncated": "truncated_fraction",
+}
+PERF_FIELDS = {
+    "rollout/fully_async/avg_staleness": "staleness",
+    "rollout/fully_async/max_staleness": "max_staleness",
+    "rollout/fully_async/stale_groups_filtered": "stale_groups_dropped",
+    "rollout/weight_version/mixed_version_ratio": "mixed_version_fraction",
 }
 MAX_SCAN = 16 * 1024 * 1024
 LOG_TAIL = 64000
@@ -35,7 +44,8 @@ def parse_metrics(text, total):
         # A concurrent writer can leave its final line incomplete.
         if not line.endswith("\n"):
             continue
-        match = EVENT.search(ANSI.sub("", line))
+        line = ANSI.sub("", line)
+        match = EVENT.search(line) or PERF.search(line)
         if not match:
             continue
         kind, index, payload = match.groups()
@@ -46,7 +56,7 @@ def parse_metrics(text, total):
         if kind == "step" and values.get("train/step") != str(index):
             continue
         sample = points.setdefault(index, {"step": index + 1, "completed": False})
-        for key, field in FIELDS.items():
+        for key, field in (PERF_FIELDS if kind == "perf" else FIELDS).items():
             if key in values:
                 value = float(values[key])
                 sample[field] = value if math.isfinite(value) else None

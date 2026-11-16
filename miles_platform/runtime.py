@@ -15,6 +15,7 @@ from miles_platform.store import now, uid
 
 REPO = Path(__file__).resolve().parents[1]
 SLOTS = {letter: 18081 + index for index, letter in enumerate("abcd")}
+MAX_WEIGHT_STALENESS = 4
 
 
 def supervise(action, service, check=True):
@@ -121,7 +122,8 @@ def train(store, job):
     output = store.root / "runs" / job["id"]
     model_id = uid("mdl")
     exported = state / "models" / model_id
-    phase(store, job["id"], "训练中 · 2 张训练 GPU + 1 张 rollout GPU")
+    fully_async = params.get("mode") == "async"
+    phase(store, job["id"], f"训练中 · {'异步 · ' if fully_async else ''}2 张训练 GPU + 1 张 rollout GPU")
     command = [
         sys.executable,
         "scripts/run_qwen3_0_6b_platform.py",
@@ -141,6 +143,10 @@ def train(store, job):
         str(params["learning_rate"]),
         "--numeric-reward",
     ]
+    if fully_async:
+        # Generation overlaps optimization; groups more than four policy
+        # versions behind the trainer are dropped instead of trained on.
+        command += ["--fully-async", "--max-weight-staleness", str(MAX_WEIGHT_STALENESS)]
     rate = job["rate"]
     started = now()
     store.execute("UPDATE jobs SET training_started=? WHERE id=?", (started, job["id"]))
@@ -183,11 +189,80 @@ def train(store, job):
             evidence["sha256"],
             1,
             json.dumps(
-                {"validation": evidence, "updates": params["updates"], "learning_rate": params["learning_rate"]}
+                {
+                    "validation": evidence,
+                    "updates": params["updates"],
+                    "learning_rate": params["learning_rate"],
+                    "mode": "async" if fully_async else "sync",
+                }
             ),
         ),
     )
     store.execute("UPDATE jobs SET model_id=? WHERE id=?", (model_id, job["id"]))
+    evaluate(store, {**job, "model_id": model_id})
+
+
+def quantize(store, job):
+    """Register a weight-quantized version of a model with its measured fidelity.
+
+    The version is stored as BF16 tensors whose values are representable in
+    the chosen format, so it previews the quality of FP8 or NVFP4 weights on
+    the existing serving path. It does not reduce serving memory or latency.
+    """
+    params = json.loads(job["params"])
+    parent = store.one("SELECT * FROM models WHERE id=?", (job["model_id"],))
+    dataset = store.one("SELECT * FROM datasets WHERE id=?", (parent["dataset_id"],))
+    state = store.root.parent
+    base_models = getattr(store, "base_models", state / "models")
+    model_id = uid("mdl")
+    exported = state / "models" / model_id
+    report = store.root / "runs" / job["id"] / "quantization.json"
+    report.parent.mkdir(parents=True, exist_ok=True)
+    # FP8 covers attention and MLP projections; NVFP4 is kept to the MLP
+    # projections, where 4-bit weights cost the least fidelity.
+    groups = "attention+mlp" if params["format"] == "fp8" else "mlp"
+    phase(store, job["id"], "权重量化与留出集保真度测量")
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "miles_platform.quantize",
+            "--model-dir",
+            parent["path"],
+            "--calibration",
+            str(Path(dataset["path"]) / "train.jsonl"),
+            "--heldout",
+            str(Path(dataset["path"]) / "eval.jsonl"),
+            "--recipe",
+            f"{params['format']}:{params['method']}:{groups}:w",
+            "--report",
+            str(report),
+            "--save",
+            str(exported),
+        ],
+        cwd=REPO,
+        env={**train_env(), "CUDA_VISIBLE_DEVICES": "1"},
+        timeout=900,
+        check=True,
+    )
+    phase(store, job["id"], "权重完整性校验")
+    evidence = validate_artifact(exported, base_models / "Qwen3-0.6B")
+    measured = json.loads(report.read_text())["results"][0]
+    store.execute(
+        "INSERT INTO models VALUES (?,?,?,?,?,?,?,?,?)",
+        (
+            model_id,
+            f"{parent['name']} · {params['format'].upper()}"[:80],
+            str(exported),
+            job["id"],
+            dataset["id"],
+            now(),
+            evidence["sha256"],
+            1,
+            json.dumps({"validation": evidence, "quantization": {**measured, "source_model": parent["id"]}}),
+        ),
+    )
+    # Keep job.model_id on the source model so a retried request stays idempotent.
     evaluate(store, {**job, "model_id": model_id})
 
 

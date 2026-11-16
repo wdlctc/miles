@@ -5,7 +5,7 @@ import os
 import time
 import traceback
 
-from miles_platform.runtime import SLOTS, deploy, evaluate, stop_training, supervise, train
+from miles_platform.runtime import SLOTS, deploy, evaluate, quantize, stop_training, supervise, train
 from miles_platform.store import now
 from miles_platform import billing
 
@@ -22,7 +22,7 @@ def run_job(store):
         os.dup2(log.fileno(), 1)
         os.dup2(log.fileno(), 2)
         try:
-            {"train": train, "evaluate": evaluate, "deploy": deploy}[job["kind"]](store, job)
+            {"train": train, "evaluate": evaluate, "deploy": deploy, "quantize": quantize}[job["kind"]](store, job)
             store.execute(
                 "UPDATE jobs SET status='succeeded',ended=? WHERE id=? AND status='running'", (now(), job["id"])
             )

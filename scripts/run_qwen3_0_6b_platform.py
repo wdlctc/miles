@@ -12,6 +12,16 @@ Args:
     --num-gpus-per-node / --trainer-gpus: Total GPUs and the training allocation.
     --num-rollout: Number of updates (default: two).
     --numeric-reward: Use the platform's bounded numeric grader for customer data.
+    --fully-async: Decouple generation from optimization. A persistent rollout
+        worker keeps generating while the trainer drains completed groups;
+        engines take new weights after every update and in-flight requests
+        continue on them, so one response can span several policy versions.
+    --max-weight-staleness: With --fully-async, drop groups whose oldest token
+        is more than this many policy versions old (0: no bound).
+    --async-max-concurrent-samples: With --fully-async, in-flight responses
+        (0: one training batch).
+    --nucleus-top-k: Sample with top-p 0.99 inside this top-k and train on
+        probabilities renormalised over each token's recorded support (0: off).
 
 Example:
     python scripts/run_qwen3_0_6b_platform.py \
@@ -42,6 +52,10 @@ class ScriptArgs(U.ExecuteTrainConfig):
     learning_rate: float = 1e-6
     graceful_ray_stop: bool = True
     numeric_reward: bool = False
+    fully_async: bool = False
+    max_weight_staleness: int = 0
+    async_max_concurrent_samples: int = 0
+    nucleus_top_k: int = 0
 
     def __post_init__(self):
         if self.num_nodes != 1:
@@ -54,6 +68,12 @@ class ScriptArgs(U.ExecuteTrainConfig):
             raise ValueError("GRPO needs at least two samples per prompt in this recipe.")
         if self.global_batch_size % self.trainer_gpus:
             raise ValueError("The sample batch must divide evenly across training GPUs.")
+        if min(self.max_weight_staleness, self.async_max_concurrent_samples, self.nucleus_top_k) < 0:
+            raise ValueError("Staleness, concurrency and top-k limits cannot be negative.")
+        if not self.fully_async and (self.max_weight_staleness or self.async_max_concurrent_samples):
+            raise ValueError("Staleness and concurrency limits apply to --fully-async only.")
+        if 0 < self.async_max_concurrent_samples < self.n_samples_per_prompt:
+            raise ValueError("Concurrency must admit at least one whole prompt group.")
 
     @property
     def global_batch_size(self) -> int:
@@ -67,8 +87,10 @@ def _data_flags(args: ScriptArgs) -> list[str]:
         str(Path(args.model_dir) / "Qwen3-0.6B"),
         "--save",
         str(output / "checkpoints"),
+        # One checkpoint with optimizer state is about 7 GiB; keep only the
+        # final one, which is the one the platform exports.
         "--save-interval",
-        "1",
+        str(args.num_rollout),
     ]
     rollout = [
         "--prompt-data",
@@ -168,6 +190,32 @@ def _training_flags(args: ScriptArgs) -> list[str]:
     return algorithm + optimizer + backend
 
 
+def _async_flags(args: ScriptArgs) -> list[str]:
+    if not args.fully_async:
+        return []
+    # in_place keeps each running request and its KV cache across a weight
+    # update; the per-token policy versions it produces feed the staleness
+    # metrics. Truncated importance sampling corrects for the policy lag.
+    flags = [
+        "--fully-async",
+        "--pause-generation-mode",
+        "in_place",
+        "--sglang-enable-prefill-weight-versions",
+        "--use-tis",
+    ]
+    if args.max_weight_staleness:
+        flags += ["--max-weight-staleness", str(args.max_weight_staleness)]
+    if args.async_max_concurrent_samples:
+        flags += ["--async-max-concurrent-samples", str(args.async_max_concurrent_samples)]
+    return flags
+
+
+def _sampling_flags(args: ScriptArgs) -> list[str]:
+    if not args.nucleus_top_k:
+        return []
+    return ["--rollout-top-p", "0.99", "--rollout-top-k", str(args.nucleus_top_k)]
+
+
 def _serving_flags() -> list[str]:
     return [
         "--sglang-attention-backend",
@@ -192,7 +240,15 @@ def execute(args: ScriptArgs):
         raise ValueError("Choose a fresh --output-dir to preserve previous checkpoints.")
     tracking = ["--use-tensorboard", "--tb-project-name", "platform", "--tb-experiment-name", "qwen3-smoke"]
     args.create_backend().execute_train(
-        train_args=shlex.join(_data_flags(args) + _training_flags(args) + _serving_flags() + tracking),
+        train_args=shlex.join(
+            _data_flags(args)
+            + _training_flags(args)
+            + _async_flags(args)
+            + _sampling_flags(args)
+            + _serving_flags()
+            + tracking
+        ),
+        train_script="train_async.py" if args.fully_async else "train.py",
         num_gpus_per_node=args.num_gpus_per_node,
         megatron_model_type=None,
         job_lifetime="launcher",

@@ -29,8 +29,8 @@ Stripe HTTP responses; they are not evidence of payment on Stripe's network.
 | Workspaces | Separate database, datasets, models, API keys, usage, ledger and deployment route |
 | Roles | Owner: billing/team; Admin: deployment/keys/invites; Member: tasks/data/playground; Viewer: read-only |
 | Operator | Create/suspend workspaces, set platform prices, inspect host GPU metrics |
-| Training | Bounded Qwen3-0.6B FSDP GRPO, queue, logs, cancellation and restart adoption |
-| Models | Export, tensor checks, SHA-256, numeric evaluation and a publication gate |
+| Training | Bounded Qwen3-0.6B FSDP GRPO, synchronous or fully asynchronous; queue, logs, cancellation and restart adoption |
+| Models | Export, tensor checks, SHA-256, numeric evaluation and a publication gate; FP8/NVFP4 weight-quantized versions with measured fidelity |
 | Serving | Workspace-owned slots, health checks, stable alias, rollback, streaming and rate limits |
 | Billing | Integer-microUSD credit ledger, atomic reservations/settlement, orders and usage CSV |
 | Stripe | Hosted Checkout, signed webhooks, canonical payment validation, replay protection, refunds/disputes |
@@ -132,6 +132,51 @@ python -m miles_platform.operations reset-link --email customer@example.com --ou
 
 The private output file is 0600; deliver it securely and remove it after use.
 The link expires in one hour, works once, and revokes existing login sessions.
+
+## Asynchronous training and quantization
+
+Both follow the post-training chapter of the Beam technical report, scaled down
+to the fixed Qwen3-0.6B recipe. Measurements and their limits are in
+[experiments/async_20261115](experiments/async_20261115/README.md) and
+[experiments/quantization_20261115](experiments/quantization_20261115/README.md).
+
+**Asynchronous training.** A training job takes `mode`: `sync` (default) waits
+for every response of an update before optimizing; `async` runs Miles'
+fully-async rollout through `train_async.py`. A persistent worker keeps
+generating while the trainer drains completed prompt groups, the rollout engine
+takes new weights after every optimizer step, and running requests continue on
+them with their KV cache, so one response can span several policy versions.
+Each token span records the policy version that produced it. Truncated
+importance sampling corrects for the lag, and groups more than four versions
+behind the trainer are dropped. The Jobs page shows two extra per-update
+columns: the sampler-versus-trainer KL at the sampled tokens, and the mean
+policy staleness in versions. Synchronous jobs report the KL only.
+
+The launcher also accepts `--async-max-concurrent-samples` and
+`--nucleus-top-k` (top-p 0.99 sampling with training probabilities renormalised
+over each token's recorded support); the platform API does not expose them.
+Rollout deadlines, a judge model and expert-routing replay from the report are
+not implemented: the recipe has single-turn numeric tasks and a dense model.
+The launcher now writes one checkpoint, at the final update, instead of one per
+update; a checkpoint with optimizer state is about 7 GiB.
+
+**Quantization.** `POST /api/models/{id}/quantize` with `format` `fp8` or
+`nvfp4` (and for NVFP4 a `method`: `max`, `four_over_six` or `local_hessian`)
+queues a job that registers a new model version. FP8 rounds attention and MLP
+projection weights to E4M3 with one scale per output channel. NVFP4 rounds MLP
+projection weights to E2M1 in blocks of 16 with E4M3 block scales;
+`local_hessian` picks each block scale to minimise output error, calibrated on
+the dataset's training prompts. The job records the teacher-forced
+KL(original‖quantized) and top-1 agreement on the dataset's evaluation prompts
+in the version's metadata, then runs the normal evaluation, so the usual
+publication gate applies before deployment.
+
+A quantized version is stored and served as BF16 tensors whose values are
+representable in the chosen format. It previews what FP8 or NVFP4 weights do to
+quality on the existing serving path. **It does not reduce serving memory or
+latency**, and activations are not quantized at serving time. Producing packed
+FP8/NVFP4 checkpoints for a low-precision SGLang engine is future work.
+Quantization jobs count toward the model quota and are not billed separately.
 
 ## Stripe setup
 

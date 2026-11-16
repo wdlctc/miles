@@ -19,7 +19,7 @@ nvidia-smi topo -m 2>/dev/null | grep -o 'NV[0-9][0-9]*' | wc -l
   -- python3 <REPO_ROOT>/train.py 
   --hf-checkpoint /root/models/Qwen3-0.6B
   --save /root/shared_data/checkpoints
-  --save-interval 1
+  --save-interval 2
   --prompt-data /root/datasets/platform-smoke/train.jsonl
   --input-key prompt
   --label-key label

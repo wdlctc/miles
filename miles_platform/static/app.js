@@ -180,7 +180,7 @@ function models() {
     `<div class="notice">✓ 发布门槛：权重校验通过、最新评测正确率 ≥ ${state.quality_threshold * 100}%，且没有输出截断。这是工程门槛，不代表业务效果达标。</div><section class="card"><div class="card-head"><h2>模型版本</h2><small>${state.models.length} 个版本</small></div><div class="table-wrap"><table><thead><tr><th>模型版本</th><th>完整性</th><th>最新评测</th><th>创建时间</th><th>操作</th></tr></thead><tbody>${state.models
       .map((m) => {
         const e = latestEval(m.id);
-        return `<tr><td><div class="model-cell"><span class="model-icon">◇</span><div><strong>${escape(m.name)}</strong><small>${escape(m.id)} · ${m.sha256.slice(0, 10)}</small></div></div></td><td><span class="pill ${m.validated ? "" : "pending"}">${m.validated ? "校验通过" : "待校验"}</span></td><td>${e ? `<strong>${e.correct}/${e.total}</strong> <span class="pill ${e.passed ? "" : "pending"}">${e.passed ? "达到门槛" : "未达标"}</span>` : "尚未评测"}</td><td>${date(m.created)}</td><td><div class="actions">${button("详情", "model-detail", m.id, "tiny")}${button("评测", "evaluate", m.id, "tiny")}${state.active?.model_id === m.id ? '<span class="pill">● 在线</span>' : button("部署", "deploy", m.id, "tiny primary")}</div></td></tr>`;
+        return `<tr><td><div class="model-cell"><span class="model-icon">◇</span><div><strong>${escape(m.name)}</strong><small>${escape(m.id)} · ${m.sha256.slice(0, 10)}</small></div></div></td><td><span class="pill ${m.validated ? "" : "pending"}">${m.validated ? "校验通过" : "待校验"}</span></td><td>${e ? `<strong>${e.correct}/${e.total}</strong> <span class="pill ${e.passed ? "" : "pending"}">${e.passed ? "达到门槛" : "未达标"}</span>` : "尚未评测"}</td><td>${date(m.created)}</td><td><div class="actions">${button("详情", "model-detail", m.id, "tiny")}${button("评测", "evaluate", m.id, "tiny")}${m.metadata.quantization ? "" : button("量化", "quantize", m.id, "tiny")}${state.active?.model_id === m.id ? '<span class="pill">● 在线</span>' : button("部署", "deploy", m.id, "tiny primary")}</div></td></tr>`;
       })
       .join("")}</tbody></table></div></section>`
   );
@@ -360,7 +360,7 @@ async function actions(action, id) {
   if (action === "new-job")
     return form(
       "创建训练任务",
-      `<div class="notice">使用 Qwen3-0.6B · FSDP GRPO。训练使用 3 张 GPU，在线推理保持运行；单任务最长训练 20 分钟。</div><label>任务名称<input name="name" required maxlength="80" value="Qwen3 · ${new Date().toLocaleDateString("zh-CN")}"></label><label>数据集<select name="dataset_id">${state.datasets.map((d) => `<option value="${d.id}" ${d.id === id ? "selected" : ""}>${escape(d.name)} · ${d.train_rows} / ${d.eval_rows} 条</option>`).join("")}</select></label><div class="form-row"><label>更新轮数<input name="updates" type="number" min="1" max="10" value="2" required><small>每轮 4 个 prompt × 4 个回答</small></label><label>学习率<input name="learning_rate" type="number" min="0.0000001" max="0.00001" step="0.0000001" value="0.000001" required></label></div>`,
+      `<div class="notice">使用 Qwen3-0.6B · FSDP GRPO。训练使用 3 张 GPU，在线推理保持运行；单任务最长训练 20 分钟。</div><label>任务名称<input name="name" required maxlength="80" value="Qwen3 · ${new Date().toLocaleDateString("zh-CN")}"></label><label>数据集<select name="dataset_id">${state.datasets.map((d) => `<option value="${d.id}" ${d.id === id ? "selected" : ""}>${escape(d.name)} · ${d.train_rows} / ${d.eval_rows} 条</option>`).join("")}</select></label><div class="form-row"><label>更新轮数<input name="updates" type="number" min="1" max="10" value="2" required><small>每轮 4 个 prompt × 4 个回答</small></label><label>学习率<input name="learning_rate" type="number" min="0.0000001" max="0.00001" step="0.0000001" value="0.000001" required></label></div><label>训练方式<select name="mode"><option value="sync">同步 · 每轮等全部回答生成完再更新</option><option value="async">异步 · 生成与更新并行，回答可跨多个策略版本</option></select><small>异步模式记录每个回答的策略版本滞后，并丢弃滞后超过 4 个版本的样本组。</small></label>`,
       "开始训练",
       async (f) => {
         const created = await post(
@@ -370,6 +370,7 @@ async function actions(action, id) {
             dataset_id: f.get("dataset_id"),
             updates: Number(f.get("updates")),
             learning_rate: Number(f.get("learning_rate")),
+            mode: f.get("mode"),
           },
           true,
         );
@@ -402,6 +403,20 @@ async function actions(action, id) {
       "运行独立评测",
       "将通过模型的聊天 API 顺序评测独立数据集，并记录发布门槛结果。",
       () => post(`/api/models/${id}/evaluate`, {}, true),
+    );
+  if (action === "quantize")
+    return form(
+      "量化模型版本",
+      `<div class="notice">生成一个权重量化的新版本，并在留出集上测量它与原版本的逐 token KL 和 top-1 一致率。新版本仍以 BF16 保存和推理，用于预览量化对质量的影响，不会降低显存或延迟。</div><label>格式<select name="format"><option value="fp8">FP8 · attention 与 MLP 权重</option><option value="nvfp4">NVFP4 · 仅 MLP 权重</option></select></label><label>NVFP4 scale 选法<select name="method"><option value="local_hessian">local Hessian · 用训练集 prompt 校准</option><option value="four_over_six">four-over-six</option><option value="max">最大值</option></select><small>FP8 固定使用 round-to-nearest。</small></label>`,
+      "开始量化",
+      async (f) => {
+        const format = f.get("format");
+        await post(`/api/models/${id}/quantize`, { format, method: format === "fp8" ? "max" : f.get("method") }, true);
+        closeDialog();
+        location.hash = "jobs";
+        await refresh();
+        toast("量化任务已加入队列");
+      },
     );
   if (action === "deploy")
     return confirmAction(

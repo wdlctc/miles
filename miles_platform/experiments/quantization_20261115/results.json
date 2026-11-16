@@ -1,0 +1,152 @@
+{
+  "model": "/workspace/mp/state/models/Qwen3-0.6B",
+  "simulation": "values are representable in the target format; arithmetic runs in floating point",
+  "calibration_tokens": 102234,
+  "heldout_tokens": 24542,
+  "results": [
+    {
+      "recipe": "fp8-max-attention+mlp-w+a",
+      "format": "fp8",
+      "method": "max",
+      "groups": [
+        "attention",
+        "mlp"
+      ],
+      "activations": true,
+      "mean_kl": 0.021561748133769643,
+      "top1_agreement": 0.945073751120528,
+      "tokens": 24542,
+      "quantized_layers": 196,
+      "mean_relative_weight_error": 0.02642503846436739
+    },
+    {
+      "recipe": "fp8-max-attention+mlp-w",
+      "format": "fp8",
+      "method": "max",
+      "groups": [
+        "attention",
+        "mlp"
+      ],
+      "activations": false,
+      "mean_kl": 0.012003985120443636,
+      "top1_agreement": 0.9577051585037895,
+      "tokens": 24542,
+      "quantized_layers": 196,
+      "mean_relative_weight_error": 0.02642503846436739
+    },
+    {
+      "recipe": "nvfp4-max-mlp-w+a",
+      "format": "nvfp4",
+      "method": "max",
+      "groups": [
+        "mlp"
+      ],
+      "activations": true,
+      "mean_kl": 0.15027779252825832,
+      "top1_agreement": 0.8563279276342597,
+      "tokens": 24542,
+      "quantized_layers": 84,
+      "mean_relative_weight_error": 0.09485134207421825
+    },
+    {
+      "recipe": "nvfp4-four_over_six-mlp-w+a",
+      "format": "nvfp4",
+      "method": "four_over_six",
+      "groups": [
+        "mlp"
+      ],
+      "activations": true,
+      "mean_kl": 0.1472315483226936,
+      "top1_agreement": 0.8611767582104148,
+      "tokens": 24542,
+      "quantized_layers": 84,
+      "mean_relative_weight_error": 0.08694399503015336
+    },
+    {
+      "recipe": "nvfp4-local_hessian-mlp-w+a",
+      "format": "nvfp4",
+      "method": "local_hessian",
+      "groups": [
+        "mlp"
+      ],
+      "activations": true,
+      "mean_kl": 0.12761065806632188,
+      "top1_agreement": 0.8738081655936761,
+      "tokens": 24542,
+      "quantized_layers": 84,
+      "mean_relative_weight_error": 0.08690566259125869
+    },
+    {
+      "recipe": "nvfp4-max-mlp-w",
+      "format": "nvfp4",
+      "method": "max",
+      "groups": [
+        "mlp"
+      ],
+      "activations": false,
+      "mean_kl": 0.09005614821538396,
+      "top1_agreement": 0.8918181077336811,
+      "tokens": 24542,
+      "quantized_layers": 84,
+      "mean_relative_weight_error": 0.09485134207421825
+    },
+    {
+      "recipe": "nvfp4-four_over_six-mlp-w",
+      "format": "nvfp4",
+      "method": "four_over_six",
+      "groups": [
+        "mlp"
+      ],
+      "activations": false,
+      "mean_kl": 0.08307917105831966,
+      "top1_agreement": 0.8945481215874826,
+      "tokens": 24542,
+      "quantized_layers": 84,
+      "mean_relative_weight_error": 0.08694399503015336
+    },
+    {
+      "recipe": "nvfp4-local_hessian-mlp-w",
+      "format": "nvfp4",
+      "method": "local_hessian",
+      "groups": [
+        "mlp"
+      ],
+      "activations": false,
+      "mean_kl": 0.060456453214093125,
+      "top1_agreement": 0.9119061201206096,
+      "tokens": 24542,
+      "quantized_layers": 84,
+      "mean_relative_weight_error": 0.08690566259125869
+    },
+    {
+      "recipe": "nvfp4-local_hessian-attention+mlp-w+a",
+      "format": "nvfp4",
+      "method": "local_hessian",
+      "groups": [
+        "attention",
+        "mlp"
+      ],
+      "activations": true,
+      "mean_kl": 0.2024083106813702,
+      "top1_agreement": 0.8423111400863825,
+      "tokens": 24542,
+      "quantized_layers": 196,
+      "mean_relative_weight_error": 0.08698225131600487
+    },
+    {
+      "recipe": "nvfp4-local_hessian-attention+mlp-w",
+      "format": "nvfp4",
+      "method": "local_hessian",
+      "groups": [
+        "attention",
+        "mlp"
+      ],
+      "activations": false,
+      "mean_kl": 0.1002289718641608,
+      "top1_agreement": 0.889536305109608,
+      "tokens": 24542,
+      "quantized_layers": 196,
+      "mean_relative_weight_error": 0.08698225131600487
+    }
+  ]
+}

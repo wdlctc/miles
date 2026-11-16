@@ -131,9 +131,9 @@ class Store:
                 raise ValueError("Workspace queue quota reached (3 active jobs)")
             models = db.execute("SELECT COUNT(*) FROM models").fetchone()[0]
             pending = db.execute(
-                "SELECT COUNT(*) FROM jobs WHERE kind='train' AND status IN ('queued','running','cancel_requested')"
+                "SELECT COUNT(*) FROM jobs WHERE kind IN ('train','quantize') AND status IN ('queued','running','cancel_requested')"
             ).fetchone()[0]
-            if models + pending >= 10 and kind == "train":
+            if models + pending >= 10 and kind in ("train", "quantize"):
                 raise ValueError("Workspace model quota reached (10); contact the operator")
             if not getattr(self, "exempt", True) and kind != "train":
                 if (

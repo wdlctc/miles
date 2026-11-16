@@ -1,5 +1,6 @@
 import asyncio
 import json
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -8,7 +9,7 @@ from fastapi.testclient import TestClient
 from miles_platform.api import create_app
 from miles_platform import billing
 from miles_platform.gateway import PUMPS, Chat, proxy, record
-from miles_platform.runtime import deploy
+from miles_platform.runtime import deploy, quantize, train
 from miles_platform.store import Store, digest, now
 from miles_platform.worker import tick
 from miles_platform.telemetry import parse_metrics
@@ -297,3 +298,86 @@ def test_only_failed_sign_ins_count_and_schema_requires_session(system):
     assert client.get("/openapi.json").status_code == 404
     assert client.post("/api/login", json={"password": "wrong"}).status_code == 401
     assert registry.data.one("SELECT COUNT(*) n FROM attempts")["n"] == 2
+
+
+def test_quantize_request_is_validated_and_registers_a_measured_version(system, monkeypatch):
+    client, store, _ = system
+    url = "/api/models/mdl/quantize"
+    assert client.post(url, json={"format": "int8"}).status_code == 422
+    assert client.post(url, json={"format": "fp8", "method": "local_hessian"}).status_code == 422
+    assert client.post("/api/models/missing/quantize", json={"format": "fp8"}).status_code == 404
+    response = client.post(url, json={"format": "nvfp4", "method": "local_hessian"})
+    assert response.status_code == 202
+    job = store.one("SELECT * FROM jobs WHERE id=?", (response.json()["id"],))
+    assert job["kind"] == "quantize" and job["model_id"] == "mdl"
+    commands = []
+
+    def fake_quantizer(command, **kwargs):
+        commands.append((command, kwargs["env"]["CUDA_VISIBLE_DEVICES"]))
+        report = command[command.index("--report") + 1]
+        with open(report, "w") as stream:
+            json.dump({"results": [{"recipe": "nvfp4-local_hessian-mlp-w", "mean_kl": 0.06, "top1_agreement": 0.91}]}, stream)
+
+    evidence = {"sha256": "quantized-hash", "unique_tensors": 310, "changed_tensors": 84, "all_finite": True}
+    evaluated = []
+    monkeypatch.setattr("miles_platform.runtime.subprocess.run", fake_quantizer)
+    monkeypatch.setattr("miles_platform.runtime.validate_artifact", lambda *paths: evidence)
+    monkeypatch.setattr("miles_platform.runtime.evaluate", lambda store, job: evaluated.append(job["model_id"]))
+    quantize(store, job)
+    command, gpu = commands[0]
+    assert command[command.index("--recipe") + 1] == "nvfp4:local_hessian:mlp:w" and gpu == "1"
+    created = store.one("SELECT * FROM models WHERE job_id=?", (job["id"],))
+    metadata = json.loads(created["metadata"])
+    assert created["name"] == "model · NVFP4" and created["sha256"] == "quantized-hash" and created["validated"]
+    assert metadata["quantization"]["source_model"] == "mdl" and metadata["quantization"]["mean_kl"] == 0.06
+    assert evaluated == [created["id"]]
+    again = client.post(f"/api/models/{created['id']}/quantize", json={"format": "fp8"})
+    assert again.status_code == 409
+
+
+def test_policy_staleness_and_sampler_divergence_are_read_from_their_own_log_lines():
+    perf = (
+        "(RolloutExecutor pid=7) [2026-11-16 04:38:05.095 rollout_executor] metrics.py:99 - perf 0: "
+        "{'rollout/fully_async/avg_staleness': 2.5, 'rollout/fully_async/max_staleness': 3, "
+        "'rollout/fully_async/stale_groups_filtered': 1, 'rollout/weight_version/mixed_version_ratio': 0.8125, "
+        "'rollout/raw_reward': 0.9}\n"
+    )
+    step = metric_line("step", 0, {"train/step": 0, "train/loss": 1e-4, "train/train_rollout_kl": 0.0005})
+    points, invalid = parse_metrics(perf + step, 1)
+    assert not invalid
+    assert points == [
+        {
+            "step": 1,
+            "completed": True,
+            "staleness": 2.5,
+            "max_staleness": 3.0,
+            "stale_groups_dropped": 1.0,
+            "mixed_version_fraction": 0.8125,
+            "loss": 1e-4,
+            "sampler_kl": 0.0005,
+        }
+    ]
+    assert parse_metrics(perf.replace("RolloutExecutor", "CustomerOutput"), 1)[0] == []
+
+
+@pytest.mark.parametrize("mode", ["sync", "async"])
+def test_training_mode_selects_the_fully_async_recipe(system, monkeypatch, mode):
+    client, store, _ = system
+    assert client.post("/api/jobs", json={"name": "x", "dataset_id": "ds", "mode": "online"}).status_code == 422
+    created = client.post("/api/jobs", json={"name": "run", "dataset_id": "ds", "updates": 3, "mode": mode})
+    assert created.status_code == 202
+    job = store.one("SELECT * FROM jobs WHERE id=?", (created.json()["id"],))
+    commands = []
+    evidence = {"sha256": "hash-" + mode, "unique_tensors": 310, "changed_tensors": 250, "all_finite": True}
+    monkeypatch.setattr("miles_platform.runtime.subprocess.run", lambda command, **kw: commands.append(command))
+    monkeypatch.setattr("miles_platform.runtime.stop_training", lambda: None)
+    monkeypatch.setattr("miles_platform.runtime.shutil.disk_usage", lambda path: SimpleNamespace(free=64 * 1024**3))
+    monkeypatch.setattr("miles_platform.runtime.validate_artifact", lambda *paths: evidence)
+    monkeypatch.setattr("miles_platform.runtime.evaluate", lambda store, job: None)
+    train(store, job)
+    launch = commands[0]
+    assert launch[launch.index("--num-rollout") + 1] == "3"
+    assert ("--fully-async" in launch) == (mode == "async")
+    assert ("--max-weight-staleness" in launch) == (mode == "async")
+    model = store.one("SELECT metadata FROM models WHERE job_id=?", (job["id"],))
+    assert json.loads(model["metadata"])["mode"] == mode
